@@ -15,20 +15,6 @@ flowchart TD
 
 ```mermaid
 graph LR
-    A[Speech Input] -->|Audio| B[Whisper STT]
-    B -->|Transcription| C[Database - Debate History]
-    C -->|Stores Past Debates| D[Speaker Profiles]
-    B -->|Transcription| E[Rhetorical Detector - Black Box]
-    E -->|Flags Rhetorical Tricks| F[Dashboard UI]
-    C -->|Retrieves Past Data| F
-    F -->|Displays| G[Analytics Panel]
-    F -->|Shows| H[Transcriptions & Indicators]
-    F -->|Search| I[Fact-checker]
-    F -->|Visualizes| J[Argument Map - Toulmin Model]
-    K[Moderator] -->|Uses Insights| F
-```
-```mermaid
-graph LR
     A[🎤 Speech Input] -->|🔊 Audio| B[📝 Whisper STT]
     B -->|📜 Transcription| C[💾 Database - Debate History]
     C -->|📚 Stores Past Debates| D[👤 Speaker Profiles]
@@ -37,7 +23,7 @@ graph LR
     C -->|🔄 Retrieves Past Data| F
     F -->|📈 Displays| G[📉 Analytics Panel]
     F -->|📝 Shows| H[🛑 Transcriptions & Indicators]
-    F -->|🔍Search| I[🌐Fact-checker]
+    F -->|🔍Search| I[🌐 Fact-checker]
     F -->|🗺️ Visualizes| J[🗂️ Argument Map - Toulmin Model]
     K[🎙️ Moderator] -->|🧠 Uses Insights| F
 ```
