@@ -1,5 +1,3 @@
-# TruthSeeker
-
 # 📌 **AI Assistant for Moderators and Journalists**
 
 ## 🎯 **Project Goal**
