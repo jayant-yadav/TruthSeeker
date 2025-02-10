@@ -23,8 +23,9 @@ graph LR
     C -->|Retrieves Past Data| F
     F -->|Displays| G[Analytics Panel]
     F -->|Shows| H[Transcriptions & Indicators]
-    F -->|Visualizes| I[Argument Map - Toulmin Model]
-    J[Moderator] -->|Uses Insights| F
+    F -->|Search| I[Fact-checker]
+    F -->|Visualizes| J[Argument Map - Toulmin Model]
+    K[Moderator] -->|Uses Insights| F
 ```
 
 ## 🚀 **Innovation Potential**
