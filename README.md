@@ -6,7 +6,7 @@ We aim to develop an **AI assistant** that helps moderators and journalists enha
 ## 🛠 **How It Works**
 
 ```mermaid
-flowchart TD
+flowchart LR
     A[Political Debate/Interview] -->|Real-time Monitoring| B(AI Assistant)
     B -->|Identifies Rhetorical Tricks| C{Analysis Module}
     C -->|Provides Real-time Feedback| D[Moderator]
