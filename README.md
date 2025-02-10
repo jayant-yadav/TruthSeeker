@@ -68,6 +68,6 @@ Unlike existing **fact-checkers**, this AI tool will:
 
 ---
 ### **Next Steps & Collaboration**
-✅ **Prototype development** with rhetoric experts. 
-✅ **Pilot testing with media organizations** (e.g., SVT, WWF policy experts)  
-✅ **User feedback & iterative improvements** based on real-world use cases  
+- **Prototype development** with rhetoric experts.  
+- **Pilot testing with media organizations** (e.g., SVT, WWF policy experts)  
+- **User feedback & iterative improvements** based on real-world use cases  
