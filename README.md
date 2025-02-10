@@ -13,6 +13,20 @@ flowchart TD
     D -->|Refines Questioning| E[Clearer Debate & Interview]
 ```
 
+```mermaid
+graph LR
+    A[Speech Input] -->|Audio| B[Whisper STT]
+    B -->|Transcription| C[Database - Debate History]
+    C -->|Stores Past Debates| D[Speaker Profiles]
+    B -->|Transcription| E[Rhetorical Detector - Black Box]
+    E -->|Flags Rhetorical Tricks| F[Dashboard UI]
+    C -->|Retrieves Past Data| F
+    F -->|Displays| G[Analytics Panel]
+    F -->|Shows| H[Transcriptions & Indicators]
+    F -->|Visualizes| I[Argument Map - Toulmin Model]
+    J[Moderator] -->|Uses Insights| F
+```
+
 ## 🚀 **Innovation Potential**
 Unlike existing **fact-checkers**, this AI tool will:  
 ✅ **Detect rhetorical tricks** like exaggeration, omission, and misdirection 🔍  
