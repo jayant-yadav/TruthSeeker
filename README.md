@@ -14,7 +14,7 @@ flowchart TD
 ```
 
 ## 🚀 **Innovation Potential**
-Unlike existing **fact-checkers**, this AI tool will:
+Unlike existing **fact-checkers**, this AI tool will:  
 ✅ **Detect rhetorical tricks** like exaggeration, omission, and misdirection 🔍  
 ✅ **Offer real-time feedback** to help moderators steer discussions back on track ⏳  
 ✅ **Provide multiple response suggestions** (e.g., varying levels of assertiveness) 🎤  
