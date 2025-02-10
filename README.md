@@ -5,6 +5,7 @@ We aim to develop an **AI assistant** that helps moderators and journalists enha
 
 ## 🛠 **How It Works**
 
+Overview:  
 ```mermaid
 flowchart LR
     A[Political Debate/Interview] -->|Real-time Monitoring| B(AI Assistant)
@@ -12,7 +13,7 @@ flowchart LR
     C -->|Provides Real-time Feedback| D[Moderator]
     D -->|Refines Questioning| E[Clearer Debate & Interview]
 ```
-
+System Design:  
 ```mermaid
 graph LR
     A[🎤 Speech Input] -->|🔊 Audio| B[📝 Whisper STT]
