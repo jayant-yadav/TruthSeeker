@@ -1,20 +1,58 @@
 # TruthSeeker
-**AI Assistant for Moderators and Journalists for More Valuable Debates and Interviews**  
 
-## Description  
-We aim to create an AI assistant for moderators and journalists that helps significantly improve the quality and utility of political debates and interviews. Today, moderators and journalists struggle to address all topics in real-time, especially the rhetorical tricks used to make messages and statements sound appealing, which may not always be particularly accurate. The goal is for debates to become very informative, straightforward, and clear to listen to - as intended. While debaters should naturally offer different perspectives on a particular issue, there is also a purpose to show what they agree on and that the debate can sometimes result in a wise and rational way forward. This happens all too rarely today. And it hinders societal development, including the green transition, more than one might first think.
+# 📌 **AI Assistant for Moderators and Journalists**
 
-## Innovation Potential  
-The innovative potential lies in making the application more than a fact-checker (which already exists) and in developing it so well that it will genuinely be used and make a difference. It involves allowing AI to recognize and understand rhetorical methods that a debater often uses to "win" the debate. This may involve confusing, belittling, exaggerating, omitting, lying, etc. Negative tricks that reduce the value of the debate for the audience, both through poorer information in the messages and also making it harder to understand. Moreover, it makes it more challenging for the counterpart to respond in a straightforward and rational manner. Once AI "understands" all the rhetorical tricks that are detrimental to the debate, the next step is to neutralize them by suggesting feedback to the human moderator. These suggestions are formulated by AI in a way that forces the debate and the debater back to a better level with better information content and clearer messages that can be debated more straightforwardly. It might involve the moderator getting tips like, "Thank you for the different perspectives but we need to stick to topic X, and it's correct that you said Y, but source Z also shows that W." The moderator may receive 3 real-time suggestions from the AI application with slightly different variants, they might, for example, be different "harsh/gentle" or try to neutralize different parts of the debater's statements. Here lies a vast potential to be sophisticated and advanced and to be innovative to progressively make this application better. But a nice thing is that even a little improvement might already make a difference.
+## 🎯 **Project Goal**
+We aim to develop an **AI assistant** that helps moderators and journalists enhance the quality and clarity of **political debates and interviews**. The goal is to reduce rhetorical distractions, making discussions more **informative, structured, and honest**. 
 
-## Social Benefit and Scalability  
-The social benefit has the potential to be enormous. In its most extensive form, such an application could end untruths and evasive statements, debates, and discussions globally. It would elevate the quality of all information in both public and private conversations (when the application is used). It can include all interviews conducted and even private conversations. Having this support could train us to become better at seeing through rhetorical tricks ourselves, and it would educate everyone who converses, especially politicians, that it is just as well to converse straightforwardly, honestly, rationally. All this is fundamental to counteracting the very negative trend we see in society with increased disinformation, polarization, manipulation, populism, and resistance to knowledge. All these phenomena, in turn, act as powerful brakes on our ability to understand things better and agree better, i.e., to make better and more decisions faster. Something which is a necessary prerequisite for a faster and positive societal development, not least for a green transition. As a pilot, the application could be used within WWF, which has its policy experts working against politicians, but as soon as possible, we would like SVT and media to use the application.
+## 🛠 **How It Works**
 
-## Feasibility  
-Judged as very high since many (all) components regarding what is needed already exist. It's very easy to find material to test on (there are endless recorded debates to train on). The purpose is clear. The maybe biggest gap is to have enough knowledge about rhetoric included in the work. But there are descriptive models on the internet (Toulmin's model for example), and I have a sharp rhetorician researcher that I am sure to get on board if we want. We have some knowledge about data sources for fact-checking and finding additional information. But at this stage, it suffices to rely on some general existing language model and preferably a current internet search. A prototype that manages to provide decent feedback is already a good prototype. Making it really sharp might require a lot of rhetoric competence and training, perhaps. But it's not needed for a successful prototype. However, I hope it will be thrilling for developers to try to crack the rhetoric used and succeed in proposing "antidotes" that win over, for example, politicians who today try to appear good without having good content, thereby ruining it for everyone. If we succeed in that, at least the developers are my heroes :-)
+```mermaid
+flowchart TD
+    A[Political Debate/Interview] -->|Real-time Monitoring| B(AI Assistant)
+    B -->|Identifies Rhetorical Tricks| C{Analysis Module}
+    C -->|Provides Real-time Feedback| D[Moderator]
+    D -->|Refines Questioning| E[Clearer Debate & Interview]
+```
 
-## AI Relevance  
-I believe there will be high ceilings regarding using AI because here we find advanced language, intricate patterns to discover, creative results to create, typically in real-time. This is not possible without what we define as AI technology today. I think there are many parts of AI technologies to bring in, it would be nice with multimodal possibilities even if voice/sound is the primary. It would be good if history is used and that the application remembers everything that has been said at least within the same debate but very interesting if it can remember "everything" a person has said, to create even stronger incentives for people to be careful about what they say they can stand for (there are probably some privacy aspects in this if it doesn't just apply to public statements). I believe the ongoing development after the hackathon needs to consider that it may require quite a bit of fine-tuning and inference to become really good.
+## 🚀 **Innovation Potential**
+Unlike existing **fact-checkers**, this AI tool will:
+✅ **Detect rhetorical tricks** like exaggeration, omission, and misdirection 🔍  
+✅ **Offer real-time feedback** to help moderators steer discussions back on track ⏳  
+✅ **Provide multiple response suggestions** (e.g., varying levels of assertiveness) 🎤  
+✅ **Improve over time** through advanced **rhetoric training** and AI fine-tuning 🤖  
 
-## Ethical Aspects  
-Thought through and mainly sees that the biases that exist in today's language models may come forward and spoil a bit. But not more than in other situations. Can the application be misused? Can't see that it can cause any harm. Possibly if it's "reverse-engineered" to create another version that does the opposite and tries to create more confusion but doesn't see that it will overcome the positive application's impact.
+## 🌍 **Social Benefit & Scalability**
+| Benefit | Impact |
+|---------|--------|
+| 📡 **Better information quality** | Clearer debates, more factual discussions |
+| 🤝 **Encourages honest communication** | Reduces misleading statements |
+| 📚 **Educates journalists & public** | Helps people recognize rhetorical tricks |
+| 🌱 **Accelerates societal development** | Supports critical decision-making (e.g., green transition) |
+| 🌎 **Scalable** | Usable in media, politics, interviews, and even private conversations |
+
+## 🔬 **Feasibility & Prototype Development**
+
+📌 **High feasibility** as core AI technologies already exist 🚀  
+📌 **Training data readily available** (political debates, interviews) 🎙️  
+📌 **Collaboration with rhetoric experts** for deeper analysis 🏛️  
+📌 **Prototype goal:** Deliver meaningful feedback, improving over iterations 🔄  
+
+## 🧠 **AI Relevance**
+
+- **Advanced NLP required** for deep language analysis 📖
+- **Real-time processing** needed for live debates ⏳
+- **Context memory** (short-term: debate context, long-term: past statements) 🧠
+- **Potential multimodal integration** (text, voice, video analysis) 🎥
+- **Privacy considerations** for handling recorded statements 🔐
+
+## ⚖️ **Ethical Considerations**
+- Bias in existing AI models must be **monitored and mitigated** ⚠️  
+- Misuse potential is **low**, but reverse-engineering for misinformation could be a risk 🔄  
+- Goal is **transparency and factual accuracy**, benefiting both moderators & the audience 🏆  
+
+---
+### **Next Steps & Collaboration**
+✅ **Prototype development** with rhetoric experts & AI engineers  
+✅ **Pilot testing with media organizations** (e.g., SVT, WWF policy experts)  
+✅ **User feedback & iterative improvements** based on real-world use cases  
