@@ -48,10 +48,10 @@ Unlike existing **fact-checkers**, this AI tool will:
 
 ## 🔬 **Feasibility & Prototype Development**
 
-📌 **High feasibility** as core AI technologies already exist 🚀  
-📌 **Training data readily available** (political debates, interviews) 🎙️  
-📌 **Collaboration with rhetoric experts** for deeper analysis 🏛️  
-📌 **Prototype goal:** Deliver meaningful feedback, improving over iterations 🔄  
+- **High feasibility** as core AI technologies already exist 🚀  
+- **Training data readily available** (political debates, interviews) 🎙️  
+- **Collaboration with rhetoric experts** for deeper analysis 🏛️  
+- **Prototype goal:** Deliver meaningful feedback, improving over iterations 🔄  
 
 ## 🧠 **AI Relevance**
 
