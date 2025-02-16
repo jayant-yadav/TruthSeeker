@@ -29,5 +29,6 @@ html, body {
   width: 100%;
   height: 20%;
   /* outline: solid 1px blue; */
+  z-index: 1;
 }
 
