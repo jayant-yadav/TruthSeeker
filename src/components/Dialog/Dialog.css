@@ -1,6 +1,6 @@
 .truth-seeker-dialog {
-    position: absolute;       /* or 'fixed' if you want it pinned on scroll */
-    bottom: 60px;
+    position: absolute;      
+    bottom: 80px;
     right: 40px;
     width: 500px;
     background: rgba(0, 0, 0, 0.9);

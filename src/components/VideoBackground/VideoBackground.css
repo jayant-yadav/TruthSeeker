@@ -15,7 +15,8 @@
 }
 
 .video {
-    max-width: 100%;
+    /* max-width: 100%; */
     height: auto;
     object-fit: contain;
+    scale: 1.4;
 }
