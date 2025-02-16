@@ -24,4 +24,5 @@ dist/
 
 # Project specific
 backend/data/
+backend/models/*.bin
 backend/**/transcripts/

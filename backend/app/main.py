@@ -17,10 +17,10 @@ load_dotenv()
 class TranscriptionConfig(BaseModel):
     mode: Literal["stream", "whole"] = "whole"
     chunk_size_ms: int = 3000
-    model_size: str = "medium.en"
+    model_checkpoint: str = "medium.en"
     input_type: Literal["file", "microphone"] = "file"
     save_transcript: bool = True
-    method: TranscriptionMethod = TranscriptionMethod.OPENAI_WHISPER
+    method: TranscriptionMethod = TranscriptionMethod.LOCAL_WHISPER
 
 
 app = FastAPI()
@@ -53,11 +53,14 @@ def save_transcript(result: TranscriptionResult):
 async def transcribe_file(
     file: UploadFile = File(...), config: TranscriptionConfig = TranscriptionConfig()
 ):
-    async with transcriber_lock:  # Ensure exclusive access to transcriber
+    async with transcriber_lock:  # Ensure exclusive access to transcriber, which is
+        # technically only relevant for the local Whisper model
+
         # Save uploaded file to temporary location
         if not file.filename:
             raise ValueError("Filename is required")
         file_extension = Path(file.filename).suffix
+
         with tempfile.NamedTemporaryFile(
             delete=False, suffix=file_extension
         ) as temp_file:
@@ -68,7 +71,9 @@ async def transcribe_file(
         try:
             # Transcribe the file using the specified method
             result = transcriber.transcribe(
-                temp_path, method=config.method, model_size=config.model_size
+                temp_path,
+                method=config.method,
+                model_checkpoint=config.model_checkpoint,
             )
 
             if config.save_transcript:

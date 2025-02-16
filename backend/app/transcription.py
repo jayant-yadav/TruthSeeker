@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from pydub import AudioSegment
 from pywhispercpp.model import Model as WhisperCppModel
 
-WHISPER_CPP_MODEL_PATH = "./data/models/"
+WHISPER_CPP_MODEL_PATH = Path("./models/").resolve()
 
 
 class TranscriptionMethod(str, Enum):
@@ -45,17 +45,42 @@ class Transcriber:
 
         return info
 
-    def _get_whisper_cpp_model_path(self, model_size: str) -> str:
-        """Convert model size to corresponding model file path."""
-        model_file = f"ggml-{model_size}.bin"
-        model_path = Path(WHISPER_CPP_MODEL_PATH) / model_file
-        return str(model_path)
+    def _download_whisper_cpp_model(self, model_checkpoint: str):
+        """Download Whisper model in the GGML format.
 
-    def get_whisper_cpp_model(self, model_size: str = "medium.en") -> WhisperCppModel:
-        """Get or initialize local Whisper model."""
+        Args:
+            model_checkpoint: Name of the model to download (e.g. 'medium.en')
+        """
+        import subprocess
+
+        # Ensure we're in the correct working directory
+        model_dir = WHISPER_CPP_MODEL_PATH
+        model_dir.mkdir(parents=True, exist_ok=True)
+
+        # Run the download script with the model directory as working directory
+        download_script = model_dir / "download-ggml-model.sh"
+        try:
+            subprocess.run([str(download_script), model_checkpoint], check=True)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Failed to download model: {e}")
+
+    def get_whisper_cpp_model(self, model_checkpoint: str) -> WhisperCppModel:
+        """Get or initialize local Whisper model.
+
+        Downloads the model if it doesn't exist locally.
+        """
         if self.local_model is None:
-            model_path = self._get_whisper_cpp_model_path(model_size)
-            self.local_model = WhisperCppModel(model_path)
+            model_file = f"ggml-{model_checkpoint}.bin"
+            model_path = WHISPER_CPP_MODEL_PATH / model_file
+
+            if not model_path.exists():
+                # Create models directory if it doesn't exist
+                model_path.parent.mkdir(parents=True, exist_ok=True)
+                # Download and convert the model
+                self._download_whisper_cpp_model(model_checkpoint)
+
+            print(f"Loading local Whisper model from {model_path}")
+            self.local_model = WhisperCppModel(str(model_path))
         return self.local_model
 
     def get_openai_client(self) -> OpenAI:
@@ -68,7 +93,7 @@ class Transcriber:
         self,
         audio_path: str,
         method: TranscriptionMethod,
-        model_size: str = "medium.en",
+        model_checkpoint: str,
     ) -> TranscriptionResult:
         """
         Transcribe audio using specified method.
@@ -76,10 +101,10 @@ class Transcriber:
         Args:
             audio_path: Path to audio file
             method: TranscriptionMethod to use
-            model_size: Size of local model (only used for LOCAL_WHISPER)
+            model_checkpoint: Name of the model to use (e.g. 'medium.en')
         """
         if method == TranscriptionMethod.LOCAL_WHISPER:
-            model = self.get_whisper_cpp_model(model_size)
+            model = self.get_whisper_cpp_model(model_checkpoint)
             segments = model.transcribe(audio_path, n_processors=1)
             text = " ".join([segment.text for segment in segments])
 
@@ -91,7 +116,7 @@ class Transcriber:
                 )
                 text = response.text
         else:
-            raise ValueError(f"Unsupported transcription method: {method}")
+            pass
 
         print(f"Transcribed text: {text}")
 
