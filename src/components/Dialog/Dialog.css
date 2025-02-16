@@ -1,0 +1,49 @@
+.truth-seeker-dialog {
+    position: absolute;       /* or 'fixed' if you want it pinned on scroll */
+    bottom: 60px;
+    right: 40px;
+    width: 500px;
+    background: rgba(0, 0, 0, 0.9);
+    color: #fff;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    font-family: sans-serif;
+    z-index: 999;
+    outline: 1px #7B61FF solid;
+  }
+  
+  .dialog-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  
+  .dialog-title {
+    font-weight: semi-bold;
+    font-size: 1.3rem;
+    color: #7B61FF;
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  
+  .ai-icon {
+    margin-left: 6px;
+    cursor: pointer;
+    user-select: none; 
+    height: 24px;
+  }
+  
+  .dialog-body strong {
+    display: block;
+    font-size: 1.1rem;
+    margin-bottom: 10px;
+  }
+  
+  .dialog-body p {
+    font-size: 1rem;
+    margin: 0;
+    line-height: 1.4;
+  }
+  
