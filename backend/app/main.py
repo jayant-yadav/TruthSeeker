@@ -20,7 +20,7 @@ class TranscriptionConfig(BaseModel):
     model_checkpoint: str = "medium.en"
     input_type: Literal["file", "microphone"] = "file"
     save_transcript: bool = True
-    method: TranscriptionMethod = TranscriptionMethod.LOCAL_WHISPER
+    method: TranscriptionMethod = TranscriptionMethod.OPENAI_WHISPER
 
 
 app = FastAPI()
