@@ -1,3 +1,60 @@
+# Frontend
+
+This is the frontend application built with React, TypeScript, and Vite.
+
+## Prerequisites
+
+- Node.js (v18 or higher recommended)
+- npm or yarn package manager
+
+## Setup
+
+1. Navigate to the frontend directory:
+```bash
+cd frontend
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Start the development server:
+```bash
+npm run dev
+```
+
+The application will be available at `http://localhost:5173` by default.
+
+## Available Scripts
+
+- `npm run dev` - Starts the development server with hot reload
+- `npm run build` - Builds the application for production
+- `npm run lint` - Runs ESLint to check code quality
+- `npm run preview` - Previews the production build locally
+
+## Development
+
+This project uses:
+- React 18 with TypeScript
+- Vite as the build tool
+- ESLint for code quality
+- TypeScript for type safety
+
+## ESLint Configuration
+
+For production applications, we recommend enabling type-aware lint rules. See the [ESLint documentation](https://eslint.org/) for more details on configuration.
+
+## Project Structure
+
+```
+frontend/
+├── src/           # Source files
+├── public/        # Static assets
+├── index.html     # Entry HTML file
+└── vite.config.ts # Vite configuration
+```
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

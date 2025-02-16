@@ -1,0 +1,1 @@
+pywhispercpp @ git+https://github.com/absadiki/pywhispercpp
