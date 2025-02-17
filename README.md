@@ -70,4 +70,20 @@ Unlike existing **fact-checkers**, this AI tool will:
 ### **Next Steps & Collaboration**
 - **Prototype development** with rhetoric experts.  
 - **Pilot testing with media organizations** (e.g., SVT, WWF policy experts)  
-- **User feedback & iterative improvements** based on real-world use cases  
+- **User feedback & iterative improvements** based on real-world use cases
+- 
+
+
+## 🚀 How to Run TruthSeeker-Front-End
+
+**Frontend** is built with **Vite** and **React** and is hosted on Vercel:  
+[https://truth-seeker-front-end.vercel.app/](https://truth-seeker-front-end.vercel.app/)
+
+The code is on the **dev** branch.
+
+To run the project locally for development, navigate to the project root (truth-seeker-front-end) and run the following commands:
+
+```bash
+npm install
+npm run dev
+
