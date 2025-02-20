@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 
 .vercel
+
+#api keys
+api_keys.json
