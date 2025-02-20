@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface TranscriptionResult {
     text: string;
@@ -8,11 +8,18 @@ interface TranscriptionResult {
     model_size: string;
 }
 
+interface StreamingResult {
+    text: string;
+    is_final: boolean;
+}
+
 const TranscriptionTester: React.FC = () => {
     const [file, setFile] = useState<File | null>(null);
     const [result, setResult] = useState<TranscriptionResult | null>(null);
+    const [streamingResult, setStreamingResult] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [mode, setMode] = useState<'stream' | 'whole'>('whole');
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = event.target.files?.[0];
@@ -22,10 +29,63 @@ const TranscriptionTester: React.FC = () => {
         }
     };
 
+    const handleStreamingTranscription = async () => {
+        if (!file) return;
+
+        setIsLoading(true);
+        setError(null);
+        setStreamingResult('');
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            console.log('Streaming transcription for file:', file.name);
+            const response = await fetch('http://localhost:8000/stream/file', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const reader = response.body?.getReader();
+            if (!reader) throw new Error('Response body is null');
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                // Convert the chunk to text and parse as JSON
+                const chunk = new TextDecoder().decode(value);
+                const results = chunk.split('\n').filter(line => line.trim());
+
+                for (const result of results) {
+                    try {
+                        const data: StreamingResult = JSON.parse(result);
+                        setStreamingResult(data.text);
+                    } catch (e) {
+                        console.error('Failed to parse streaming result:', e);
+                    }
+                }
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'An error occurred');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         if (!file) {
             setError('Please select a file first');
+            return;
+        }
+
+        if (mode === 'stream') {
+            await handleStreamingTranscription();
             return;
         }
 
@@ -61,6 +121,20 @@ const TranscriptionTester: React.FC = () => {
             <form onSubmit={handleSubmit} className="mb-6">
                 <div className="mb-4">
                     <label className="block mb-2">
+                        Transcription Mode:
+                        <select
+                            value={mode}
+                            onChange={(e) => setMode(e.target.value as 'stream' | 'whole')}
+                            className="block w-full mt-1 p-2 border rounded"
+                        >
+                            <option value="whole">Complete File</option>
+                            <option value="stream">Streaming</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div className="mb-4">
+                    <label className="block mb-2">
                         Select audio file:
                         <input
                             type="file"
@@ -89,13 +163,24 @@ const TranscriptionTester: React.FC = () => {
                 </div>
             )}
 
-            {result && (
+            {mode === 'stream' && streamingResult && (
+                <div className="mt-6">
+                    <h2 className="text-xl font-semibold mb-2">Streaming Result:</h2>
+                    <div className="p-4 bg-gray-100 rounded">
+                        <p>{streamingResult}</p>
+                    </div>
+                </div>
+            )}
+
+            {mode === 'whole' && result && (
                 <div className="mt-6">
                     <h2 className="text-xl font-semibold mb-2">Transcription Result:</h2>
                     <div className="p-4 bg-gray-100 rounded">
                         <p>{result.text}</p>
                         <div className="mt-2 text-sm text-gray-600">
-                            {result.duration && <p>Duration: {result.duration.toFixed(2)}s</p>}
+                            {result.duration && (
+                                <p>Duration: {result.duration.toFixed(2)}s</p>
+                            )}
                             <p>Method: {result.method}</p>
                         </div>
                     </div>

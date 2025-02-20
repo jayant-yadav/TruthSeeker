@@ -1,9 +1,12 @@
 import os
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
+from app.audio_utils import prepare_openai_audio
 from openai import OpenAI
 from pydantic import BaseModel
 from pydub import AudioSegment
@@ -24,10 +27,17 @@ class TranscriptionResult(BaseModel):
     method: TranscriptionMethod
 
 
+@dataclass
+class StreamingTranscriptionResult:
+    text: str
+    is_final: bool
+
+
 class Transcriber:
     def __init__(self):
         self.local_model: Optional[WhisperCppModel] = None
         self.openai_client: Optional[OpenAI] = None
+        self.current_text: str = ""
 
     def _get_audio_info(self, audio_path: str):
         """Get audio file information"""
@@ -101,7 +111,7 @@ class Transcriber:
         Args:
             audio_path: Path to audio file
             method: TranscriptionMethod to use
-            model_checkpoint: Name of the model to use (e.g. 'medium.en')
+            model_checkpoint for local Whisper model: Name of the model to use (e.g. 'medium.en')
         """
         if method == TranscriptionMethod.LOCAL_WHISPER:
             model = self.get_whisper_cpp_model(model_checkpoint)
@@ -127,3 +137,71 @@ class Transcriber:
             audio_duration=audio_info["duration_seconds"],
             method=method,
         )
+
+    def start_streaming(self) -> None:
+        """Initialize streaming mode."""
+        self.current_text = ""
+
+    def stop_streaming(self) -> None:
+        """Clean up streaming resources."""
+        self.current_text = ""
+
+    def process_stream_chunk(
+        self, chunk: np.ndarray, is_final: bool = False
+    ) -> StreamingTranscriptionResult:
+        """Process a chunk of audio data and return partial transcription.
+
+        Args:
+            chunk: numpy array of audio samples (float32, mono, 16kHz)
+            is_final: whether this is the final chunk
+
+        Returns:
+            StreamingTranscriptionResult with partial transcription
+        """
+        try:
+            # Transcribe the chunk
+            if self.local_model is not None:
+                # For local Whisper, we can use the array directly
+                # Convert float32 [-1.0, 1.0] to int16 [-32768, 32767]
+                audio_data = (chunk * 32768.0).astype(np.int16)
+                segments = self.local_model.transcribe(
+                    audio_data.tobytes(),
+                    n_processors=1,
+                    n_samples=len(chunk),
+                )
+                text = " ".join([segment.text for segment in segments])
+            else:
+                # For OpenAI API, we need to create a temporary file
+                temp_path = prepare_openai_audio(chunk)
+                if temp_path is None:
+                    return StreamingTranscriptionResult(
+                        text=self.current_text, is_final=is_final
+                    )
+                try:
+                    # Fallback to OpenAI API
+                    client = self.get_openai_client()
+                    with open(temp_path, "rb") as audio_file:
+                        response = client.audio.transcriptions.create(
+                            model="whisper-1", file=audio_file
+                        )
+                        text = response.text
+                finally:
+                    temp_path.unlink(missing_ok=True)
+
+            # Only append new text if it's not already part of current_text
+            if text.strip() and text.strip() not in self.current_text:
+                if self.current_text:
+                    self.current_text += " " + text.strip()
+                else:
+                    self.current_text = text.strip()
+
+            return StreamingTranscriptionResult(
+                text=self.current_text,
+                is_final=is_final,
+            )
+
+        except Exception as e:
+            print(f"Error processing chunk: {e}")
+            return StreamingTranscriptionResult(
+                text=self.current_text, is_final=is_final
+            )
