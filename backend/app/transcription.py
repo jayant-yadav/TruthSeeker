@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 from app.audio_utils import prepare_openai_audio
@@ -34,10 +33,29 @@ class StreamingTranscriptionResult:
 
 
 class Transcriber:
-    def __init__(self):
-        self.local_model: Optional[WhisperCppModel] = None
-        self.openai_client: Optional[OpenAI] = None
-        self.current_text: str = ""
+    def __init__(
+        self,
+        method: TranscriptionMethod = TranscriptionMethod.LOCAL_WHISPER,
+        model_checkpoint: str = "medium.en",
+    ):
+        """Initialize transcriber with specified method and model.
+
+        Args:
+            method: TranscriptionMethod to use (LOCAL_WHISPER or OPENAI_WHISPER)
+            model_checkpoint: Name of the model to use for local Whisper (e.g. 'medium.en')
+        """
+        self.method = method
+        self.model_checkpoint = model_checkpoint
+        self.local_model = None
+        self.openai_client = None
+        self.current_text = ""
+        self.last_chunk_text = ""
+
+        # Initialize the appropriate model based on method
+        if method == TranscriptionMethod.LOCAL_WHISPER:
+            self.local_model = self._get_whisper_cpp_model(model_checkpoint)
+        elif method == TranscriptionMethod.OPENAI_WHISPER:
+            self.openai_client = self._get_openai_client()
 
     def _get_audio_info(self, audio_path: str):
         """Get audio file information"""
@@ -74,7 +92,7 @@ class Transcriber:
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to download model: {e}")
 
-    def get_whisper_cpp_model(self, model_checkpoint: str) -> WhisperCppModel:
+    def _get_whisper_cpp_model(self, model_checkpoint: str) -> WhisperCppModel:
         """Get or initialize local Whisper model.
 
         Downloads the model if it doesn't exist locally.
@@ -93,40 +111,36 @@ class Transcriber:
             self.local_model = WhisperCppModel(str(model_path))
         return self.local_model
 
-    def get_openai_client(self) -> OpenAI:
+    def _get_openai_client(self) -> OpenAI:
         """Get or initialize OpenAI client."""
         if self.openai_client is None:
             self.openai_client = OpenAI()
         return self.openai_client
 
-    def transcribe(
+    def transcribe_file(
         self,
         audio_path: str,
-        method: TranscriptionMethod,
-        model_checkpoint: str,
     ) -> TranscriptionResult:
         """
-        Transcribe audio using specified method.
+        Transcribe audio file using the configured method.
 
         Args:
             audio_path: Path to audio file
-            method: TranscriptionMethod to use
-            model_checkpoint for local Whisper model: Name of the model to use (e.g. 'medium.en')
         """
-        if method == TranscriptionMethod.LOCAL_WHISPER:
-            model = self.get_whisper_cpp_model(model_checkpoint)
-            segments = model.transcribe(audio_path, n_processors=1)
+        if self.method == TranscriptionMethod.LOCAL_WHISPER:
+            if self.local_model is None:
+                raise RuntimeError("Local Whisper model not initialized")
+            segments = self.local_model.transcribe(audio_path, n_processors=1)
             text = " ".join([segment.text for segment in segments])
 
-        elif method == TranscriptionMethod.OPENAI_WHISPER:
-            client = self.get_openai_client()
+        elif self.method == TranscriptionMethod.OPENAI_WHISPER:
+            if self.openai_client is None:
+                raise RuntimeError("OpenAI client not initialized")
             with open(audio_path, "rb") as audio_file:
-                response = client.audio.transcriptions.create(
+                response = self.openai_client.audio.transcriptions.create(
                     model="whisper-1", file=audio_file
                 )
                 text = response.text
-        else:
-            pass
 
         print(f"Transcribed text: {text}")
 
@@ -135,42 +149,50 @@ class Transcriber:
             text=text,
             timestamp=datetime.now().isoformat(),
             audio_duration=audio_info["duration_seconds"],
-            method=method,
+            method=self.method,
         )
 
-    def start_streaming(self) -> None:
+    def start_stream(self) -> None:
         """Initialize streaming mode."""
         self.current_text = ""
+        self.last_chunk_text = ""
 
-    def stop_streaming(self) -> None:
+    def stop_stream(self) -> None:
         """Clean up streaming resources."""
         self.current_text = ""
+        self.last_chunk_text = ""
 
-    def process_stream_chunk(
-        self, chunk: np.ndarray, is_final: bool = False
+    def transcribe_chunk(
+        self,
+        chunk: np.ndarray,
+        is_final: bool = False,
     ) -> StreamingTranscriptionResult:
         """Process a chunk of audio data and return partial transcription.
 
         Args:
             chunk: numpy array of audio samples (float32, mono, 16kHz)
-            is_final: whether this is the final chunk
+            is_final: whether this is the final chunk in the stream
 
         Returns:
-            StreamingTranscriptionResult with partial transcription
+            StreamingTranscriptionResult with partial transcription and finality status.
+            is_final will be True when:
+            1. This is the last chunk in the stream (is_final=True passed in)
+            2. A natural sentence break is detected
+            3. An error occurred and we're returning the last known good state
         """
         try:
             # Transcribe the chunk
-            if self.local_model is not None:
-                # For local Whisper, we can use the array directly
-                # Convert float32 [-1.0, 1.0] to int16 [-32768, 32767]
-                audio_data = (chunk * 32768.0).astype(np.int16)
+            if self.method == TranscriptionMethod.LOCAL_WHISPER:
+                if self.local_model is None:
+                    raise RuntimeError("Local Whisper model not initialized")
+                # Use last chunk's text as initial prompt if available
                 segments = self.local_model.transcribe(
-                    audio_data.tobytes(),
-                    n_processors=1,
-                    n_samples=len(chunk),
+                    chunk, n_processors=1, initial_prompt=self.last_chunk_text
                 )
                 text = " ".join([segment.text for segment in segments])
             else:
+                if self.openai_client is None:
+                    raise RuntimeError("OpenAI client not initialized")
                 # For OpenAI API, we need to create a temporary file
                 temp_path = prepare_openai_audio(chunk)
                 if temp_path is None:
@@ -178,30 +200,43 @@ class Transcriber:
                         text=self.current_text, is_final=is_final
                     )
                 try:
-                    # Fallback to OpenAI API
-                    client = self.get_openai_client()
+                    # Use OpenAI API
                     with open(temp_path, "rb") as audio_file:
-                        response = client.audio.transcriptions.create(
-                            model="whisper-1", file=audio_file
+                        kwargs = {"model": "whisper-1", "file": audio_file}
+                        response = self.openai_client.audio.transcriptions.create(
+                            **kwargs
                         )
                         text = response.text
                 finally:
                     temp_path.unlink(missing_ok=True)
 
+            # Store this chunk's text for next iteration
+            self.last_chunk_text = text.strip()
+
             # Only append new text if it's not already part of current_text
-            if text.strip() and text.strip() not in self.current_text:
+            if text.strip():
                 if self.current_text:
                     self.current_text += " " + text.strip()
                 else:
                     self.current_text = text.strip()
 
+            # Determine if this is a final segment
+            # A segment is final if:
+            # 1. This is the last chunk (is_final=True passed in)
+            # 2. The text ends with a sentence-ending punctuation
+            is_sentence_end = any(
+                self.current_text.rstrip().endswith(p) for p in [".", "!", "?"]
+            )
+
             return StreamingTranscriptionResult(
                 text=self.current_text,
-                is_final=is_final,
+                is_final=is_final or is_sentence_end,
             )
 
         except Exception as e:
             print(f"Error processing chunk: {e}")
+            # Return last known good state and mark as final due to error
             return StreamingTranscriptionResult(
-                text=self.current_text, is_final=is_final
+                text=self.current_text,
+                is_final=True,  # Mark as final since we encountered an error
             )

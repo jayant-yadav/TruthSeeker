@@ -8,8 +8,8 @@ from pydub import AudioSegment
 
 async def stream_audio_file(
     file_path: Path,
-    chunk_duration_ms: int = 3000,
-    overlap_ms: int = 1000,
+    chunk_duration_ms: int,
+    overlap_ms: int,
 ) -> AsyncIterator[np.ndarray]:
     """Stream an audio file in chunks with overlap.
 
@@ -29,16 +29,14 @@ async def stream_audio_file(
     if audio.frame_rate != 16000:
         audio = audio.set_frame_rate(16000)
 
-    # Calculate chunk sizes
-    chunk_size = int(chunk_duration_ms * audio.frame_rate / 1000)
-    overlap_size = int(overlap_ms * audio.frame_rate / 1000)
-
     # Stream chunks
-    current_position = 0
-    while current_position < len(audio):
-        # Extract chunk with overlap
-        chunk_end = min(current_position + chunk_size, len(audio))
-        chunk = audio[current_position:chunk_end]
+    current_position_ms = 0
+    duration_ms = len(audio)  # AudioSegment.len returns duration in milliseconds
+
+    while current_position_ms < duration_ms:
+        # Extract chunk with overlap using milliseconds
+        chunk_end_ms = min(current_position_ms + chunk_duration_ms, duration_ms)
+        chunk = audio[current_position_ms:chunk_end_ms]
 
         # Convert to numpy array and normalize
         samples = np.array(chunk.get_array_of_samples()).astype(np.float32) / 32768.0
@@ -46,7 +44,7 @@ async def stream_audio_file(
         yield samples
 
         # Move to next chunk, considering overlap
-        current_position += chunk_size - overlap_size
+        current_position_ms += chunk_duration_ms - overlap_ms
 
 
 def prepare_openai_audio(samples: np.ndarray) -> Optional[Path]:

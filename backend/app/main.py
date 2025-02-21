@@ -25,12 +25,12 @@ load_dotenv()
 
 class TranscriptionConfig(BaseModel):
     mode: Literal["stream", "whole"] = "whole"
-    chunk_size_ms: int = 2000
+    chunk_size_ms: int = 5000
     overlap_ms: int = 0
     model_checkpoint: str = "medium.en"
     input_type: Literal["file", "microphone"] = "file"
     save_transcript: bool = True
-    method: TranscriptionMethod = TranscriptionMethod.OPENAI_WHISPER
+    method: TranscriptionMethod = TranscriptionMethod.LOCAL_WHISPER
 
 
 app = FastAPI()
@@ -44,7 +44,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global transcriber instance and semaphore
+# Global state
+active_config = TranscriptionConfig()
 transcriber = Transcriber()
 transcriber_lock = Semaphore(1)  # Allow only one transcription at a time
 
@@ -60,13 +61,11 @@ def save_transcript(result: TranscriptionResult):
 
 
 @app.post("/transcribe/file")
-async def transcribe_file(
-    file: UploadFile = File(...), config: TranscriptionConfig = TranscriptionConfig()
-):
-    async with transcriber_lock:  # Ensure exclusive access to transcriber, which is
-        # technically only relevant for the local Whisper model
+async def transcribe_file(file: UploadFile = File(...)):
+    """Transcribe a file using the current active configuration."""
+    global transcriber
 
-        # Save uploaded file to temporary location
+    async with transcriber_lock:
         if not file.filename:
             raise ValueError("Filename is required")
         file_extension = Path(file.filename).suffix
@@ -79,14 +78,10 @@ async def transcribe_file(
             temp_path = temp_file.name
 
         try:
-            # Transcribe the file using the specified method
-            result = transcriber.transcribe(
-                temp_path,
-                method=config.method,
-                model_checkpoint=config.model_checkpoint,
-            )
+            # Use the existing transcriber instance
+            result = transcriber.transcribe_file(temp_path)
 
-            if config.save_transcript:
+            if active_config.save_transcript:
                 save_transcript(result)
 
             return result
@@ -102,7 +97,7 @@ async def websocket_endpoint(websocket: WebSocket):
     async with transcriber_lock:
         try:
             # Initialize transcriber in streaming mode
-            transcriber.start_streaming()
+            transcriber.start_stream()
 
             while True:
                 # Receive audio chunk as bytes
@@ -112,7 +107,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 chunk = np.frombuffer(audio_chunk, dtype=np.float32)
 
                 # Process the chunk and get intermediate transcription
-                partial_result = transcriber.process_stream_chunk(chunk)
+                partial_result = transcriber.transcribe_chunk(chunk)
 
                 # Send back the partial transcription
                 await websocket.send_json({
@@ -122,28 +117,39 @@ async def websocket_endpoint(websocket: WebSocket):
 
         except WebSocketDisconnect:
             # Clean up streaming resources
-            transcriber.stop_streaming()
+            transcriber.stop_stream()
         except Exception as e:
             await websocket.send_json({"error": str(e)})
-            transcriber.stop_streaming()
+            transcriber.stop_stream()
 
 
 @app.get("/config")
 async def get_config():
-    return TranscriptionConfig()
+    """Get the current active configuration."""
+    return active_config
 
 
 @app.post("/config")
 async def update_config(config: TranscriptionConfig):
-    # Here you could persist the config if needed
-    return config
+    """Update the configuration and reinitialize the transcriber."""
+    global active_config, transcriber
+
+    async with transcriber_lock:
+        # Update the active configuration
+        active_config = config
+
+        # Create a new transcriber with the updated config
+        transcriber = Transcriber(
+            method=config.method,
+            model_checkpoint=config.model_checkpoint,
+        )
+
+        return active_config
 
 
 @app.post("/stream/file")
-async def stream_file(
-    file: UploadFile = File(...), config: TranscriptionConfig = TranscriptionConfig()
-):
-    """Stream transcription from an audio file by simulating microphone input."""
+async def stream_file(file: UploadFile = File(...)):
+    """Stream transcription from an audio file using the current active configuration."""
     if not file.filename:
         raise ValueError("Filename is required")
 
@@ -158,21 +164,29 @@ async def stream_file(
 
     async def generate():
         try:
-            # Initialize transcriber in streaming mode
+            # Use the existing transcriber instance
             async with transcriber_lock:
-                transcriber.start_streaming()
+                transcriber.start_stream()
 
                 # Stream chunks from the file
-                async for chunk in stream_audio_file(
-                    temp_path,
-                    chunk_duration_ms=config.chunk_size_ms,
-                    overlap_ms=config.overlap_ms,
-                ):
+                chunks = [
+                    chunk
+                    async for chunk in stream_audio_file(
+                        temp_path,
+                        chunk_duration_ms=active_config.chunk_size_ms,
+                        overlap_ms=active_config.overlap_ms,
+                    )
+                ]
+
+                # Process each chunk
+                for i, chunk in enumerate(chunks):
                     # Process the chunk and get intermediate transcription
-                    partial_result = transcriber.process_stream_chunk(chunk)
+                    is_final = i == len(chunks) - 1  # True for last chunk
+                    partial_result = transcriber.transcribe_chunk(
+                        chunk, is_final=is_final
+                    )
 
                     # Yield the partial transcription
-
                     print("\n\npartial_result:\n\n", partial_result.text)
                     yield (
                         json.dumps({
@@ -185,7 +199,7 @@ async def stream_file(
         except Exception as e:
             yield json.dumps({"error": str(e)}) + "\n"
         finally:
-            transcriber.stop_streaming()
+            transcriber.stop_stream()
             if temp_path:
                 temp_path.unlink(missing_ok=True)
 
