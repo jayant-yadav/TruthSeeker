@@ -35,8 +35,8 @@ class StreamingTranscriptionResult:
 class Transcriber:
     def __init__(
         self,
-        method: TranscriptionMethod = TranscriptionMethod.LOCAL_WHISPER,
-        model_checkpoint: str = "medium.en",
+        method: TranscriptionMethod,
+        model_checkpoint,
     ):
         """Initialize transcriber with specified method and model.
 
@@ -220,17 +220,8 @@ class Transcriber:
                 else:
                     self.current_text = text.strip()
 
-            # Determine if this is a final segment
-            # A segment is final if:
-            # 1. This is the last chunk (is_final=True passed in)
-            # 2. The text ends with a sentence-ending punctuation
-            is_sentence_end = any(
-                self.current_text.rstrip().endswith(p) for p in [".", "!", "?"]
-            )
-
             return StreamingTranscriptionResult(
-                text=self.current_text,
-                is_final=is_final or is_sentence_end,
+                text=self.current_text, is_final=is_final
             )
 
         except Exception as e:

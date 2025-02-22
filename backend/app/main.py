@@ -3,10 +3,9 @@ import tempfile
 from asyncio import Semaphore
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import List
 
 import numpy as np
-from app.audio_utils import stream_audio_file
 from app.transcription import Transcriber, TranscriptionMethod, TranscriptionResult
 from dotenv import load_dotenv
 from fastapi import (
@@ -14,23 +13,63 @@ from fastapi import (
     File,
     UploadFile,
     WebSocket,
-    WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 load_dotenv()
 
 
 class TranscriptionConfig(BaseModel):
-    mode: Literal["stream", "whole"] = "whole"
+    model_checkpoint: str = "whisper-1"
+    method: TranscriptionMethod = TranscriptionMethod.OPENAI_WHISPER
+    save_transcript: bool = True
     chunk_size_ms: int = 5000
     overlap_ms: int = 0
-    model_checkpoint: str = "medium.en"
-    input_type: Literal["file", "microphone"] = "file"
-    save_transcript: bool = True
-    method: TranscriptionMethod = TranscriptionMethod.LOCAL_WHISPER
+
+
+class AudioBuffer:
+    def __init__(self, chunk_size_ms: int, sample_rate: int = 16000):
+        """Initialize audio buffer for accumulating samples.
+
+        Args:
+            chunk_size_ms: Size of each chunk in milliseconds
+            sample_rate: Sample rate of the audio (default 16kHz for Whisper)
+        """
+        self.chunk_size_ms = chunk_size_ms
+        self.sample_rate = sample_rate
+        self.samples_per_chunk = int((chunk_size_ms / 1000) * sample_rate)
+        self.buffer: List[float] = []
+
+    def add_samples(self, new_samples: np.ndarray) -> List[np.ndarray]:
+        """Add new samples to the buffer and return complete chunks if available.
+
+        Args:
+            new_samples: New audio samples to add
+
+        Returns:
+            List of complete chunks (if any)
+        """
+        # Add new samples to buffer
+        self.buffer.extend(new_samples.tolist())
+
+        # Extract complete chunks
+        complete_chunks = []
+        while len(self.buffer) >= self.samples_per_chunk:
+            chunk = np.array(self.buffer[: self.samples_per_chunk], dtype=np.float32)
+            complete_chunks.append(chunk)
+            self.buffer = self.buffer[self.samples_per_chunk :]
+
+        return complete_chunks
+
+    def get_remaining_samples(self) -> np.ndarray:
+        """Get any remaining samples in the buffer and clear it."""
+        if not self.buffer:
+            return np.array([], dtype=np.float32)
+
+        samples = np.array(self.buffer, dtype=np.float32)
+        self.buffer = []
+        return samples
 
 
 app = FastAPI()
@@ -46,7 +85,10 @@ app.add_middleware(
 
 # Global state
 active_config = TranscriptionConfig()
-transcriber = Transcriber()
+transcriber = Transcriber(
+    method=active_config.method,
+    model_checkpoint=active_config.model_checkpoint,
+)
 transcriber_lock = Semaphore(1)  # Allow only one transcription at a time
 
 
@@ -58,6 +100,30 @@ def save_transcript(result: TranscriptionResult):
     output_file = output_dir / f"transcript_{timestamp}.json"
     with open(output_file, "w") as f:
         json.dump(result.model_dump(), f, indent=2)
+
+
+@app.get("/config")
+async def get_config():
+    """Get the current active configuration."""
+    return active_config
+
+
+@app.post("/config")
+async def update_config(config: TranscriptionConfig):
+    """Update the configuration and reinitialize the transcriber."""
+    global active_config, transcriber
+
+    async with transcriber_lock:
+        # Update the active configuration
+        active_config = config
+
+        # Create a new transcriber with the updated config
+        transcriber = Transcriber(
+            method=config.method,
+            model_checkpoint=config.model_checkpoint,
+        )
+
+        return active_config
 
 
 @app.post("/transcribe/file")
@@ -92,123 +158,96 @@ async def transcribe_file(file: UploadFile = File(...)):
 
 @app.websocket("/stream")
 async def websocket_endpoint(websocket: WebSocket):
+    """Handle WebSocket connections for real-time audio streaming."""
+    print("New WebSocket connection attempt")
     await websocket.accept()
+    print("WebSocket connection accepted")
 
-    async with transcriber_lock:
+    try:
+        # Initialize streaming mode
+        transcriber.start_stream()
+        print("Transcriber streaming mode initialized")
+
+        # Create audio buffer for accumulating samples
+        audio_buffer = AudioBuffer(chunk_size_ms=active_config.chunk_size_ms)
+        print(f"Audio buffer created with chunk size {active_config.chunk_size_ms}ms")
+
+        while True:
+            # Receive message
+            try:
+                message = await websocket.receive()
+            except Exception as e:
+                print(f"Error receiving message: {e}")
+                break
+
+            try:
+                if (message["type"] == "websocket.receive") and ("bytes" in message):
+                    # Handle binary audio data
+                    audio_data = message["bytes"]
+                    data_len = len(audio_data) if audio_data else 0
+
+                    if not audio_data or data_len == 0:
+                        print("Skipping empty audio data")
+                        continue
+
+                    try:
+                        # Convert to numpy array
+                        samples = np.frombuffer(audio_data, dtype=np.float32)
+
+                        # Add samples to buffer and get complete chunks
+                        complete_chunks = audio_buffer.add_samples(samples)
+
+                        # Process each complete chunk
+                        for chunk in complete_chunks:
+                            result = transcriber.transcribe_chunk(chunk)
+                            await websocket.send_json({
+                                "text": result.text,
+                                "is_final": False,
+                            })
+                    except Exception as e:
+                        print(f"Error processing audio data: {e}")
+                        continue
+
+                elif (message["type"] == "websocket.receive") and ("text" in message):
+                    # Handle control message
+                    try:
+                        data = json.loads(message["text"])
+                        print(f"Received control message: {data}")
+                        if data.get("isLastChunk"):
+                            print("Processing final chunk")
+                            # Process any remaining samples
+                            remaining_samples = audio_buffer.get_remaining_samples()
+                            if len(remaining_samples) > 0:
+                                result = transcriber.transcribe_chunk(
+                                    remaining_samples, is_final=True
+                                )
+                                await websocket.send_json({
+                                    "text": result.text,
+                                    "is_final": True,
+                                })
+
+                            print(f"Processed final chunk: {result.text}")
+
+                            continue
+
+                    except json.JSONDecodeError as e:
+                        print(f"Error decoding JSON message: {e}")
+                        continue
+
+                elif message["type"] == "websocket.disconnect":
+                    print("Client disconnected")
+                    break
+
+            except Exception as e:
+                print(f"Error handling message: {e}")
+                continue
+
+    except Exception as e:
+        print(f"Error in WebSocket connection: {e}")
+    finally:
+        print("Cleaning up connection")
+        transcriber.stop_stream()
         try:
-            # Initialize transcriber in streaming mode
-            transcriber.start_stream()
-
-            while True:
-                # Receive audio chunk as bytes
-                audio_chunk = await websocket.receive_bytes()
-
-                # Convert bytes to audio samples
-                chunk = np.frombuffer(audio_chunk, dtype=np.float32)
-
-                # Process the chunk and get intermediate transcription
-                partial_result = transcriber.transcribe_chunk(chunk)
-
-                # Send back the partial transcription
-                await websocket.send_json({
-                    "text": partial_result.text,
-                    "is_final": partial_result.is_final,
-                })
-
-        except WebSocketDisconnect:
-            # Clean up streaming resources
-            transcriber.stop_stream()
-        except Exception as e:
-            await websocket.send_json({"error": str(e)})
-            transcriber.stop_stream()
-
-
-@app.get("/config")
-async def get_config():
-    """Get the current active configuration."""
-    return active_config
-
-
-@app.post("/config")
-async def update_config(config: TranscriptionConfig):
-    """Update the configuration and reinitialize the transcriber."""
-    global active_config, transcriber
-
-    async with transcriber_lock:
-        # Update the active configuration
-        active_config = config
-
-        # Create a new transcriber with the updated config
-        transcriber = Transcriber(
-            method=config.method,
-            model_checkpoint=config.model_checkpoint,
-        )
-
-        return active_config
-
-
-@app.post("/stream/file")
-async def stream_file(file: UploadFile = File(...)):
-    """Stream transcription from an audio file using the current active configuration."""
-    if not file.filename:
-        raise ValueError("Filename is required")
-
-    # Create temporary file outside of the generator
-    temp_path = None
-    file_extension = Path(str(file.filename)).suffix
-    content = await file.read()  # Read content immediately
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as temp_file:
-        temp_file.write(content)
-        temp_path = Path(temp_file.name)
-
-    async def generate():
-        try:
-            # Use the existing transcriber instance
-            async with transcriber_lock:
-                transcriber.start_stream()
-
-                # Stream chunks from the file
-                chunks = [
-                    chunk
-                    async for chunk in stream_audio_file(
-                        temp_path,
-                        chunk_duration_ms=active_config.chunk_size_ms,
-                        overlap_ms=active_config.overlap_ms,
-                    )
-                ]
-
-                # Process each chunk
-                for i, chunk in enumerate(chunks):
-                    # Process the chunk and get intermediate transcription
-                    is_final = i == len(chunks) - 1  # True for last chunk
-                    partial_result = transcriber.transcribe_chunk(
-                        chunk, is_final=is_final
-                    )
-
-                    # Yield the partial transcription
-                    print("\n\npartial_result:\n\n", partial_result.text)
-                    yield (
-                        json.dumps({
-                            "text": partial_result.text,
-                            "is_final": partial_result.is_final,
-                        })
-                        + "\n"
-                    )
-
-        except Exception as e:
-            yield json.dumps({"error": str(e)}) + "\n"
-        finally:
-            transcriber.stop_stream()
-            if temp_path:
-                temp_path.unlink(missing_ok=True)
-
-    return StreamingResponse(
-        generate(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "Access-Control-Allow-Origin": "*",
-        },
-    )
+            await websocket.close()
+        except:
+            pass
