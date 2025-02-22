@@ -4,51 +4,57 @@ from typing import Optional
 
 import numpy as np
 
+WHISPER_SAMPLE_RATE_HZ = 16000
+
 
 class AudioBuffer:
-    def __init__(self, chunk_size_ms: int, sample_rate: int = 16000):
-        """Initialize audio buffer for real-time processing.
+    def __init__(self, chunk_size_ms: int, overlap_ms: int, sample_rate: int):
+        """Initialize audio buffer for accumulating samples.
 
         Args:
-            chunk_size_ms: Size of chunks to process in milliseconds
-            sample_rate: Audio sample rate (Hz)
+            chunk_size_ms: Size of each chunk in milliseconds
+            overlap_ms: Overlap between consecutive chunks in milliseconds
+            sample_rate: Sample rate of the audio (default 16kHz for Whisper)
         """
         self.chunk_size_ms = chunk_size_ms
+        self.overlap_ms = min(
+            overlap_ms, chunk_size_ms
+        )  # Ensure overlap doesn't exceed chunk size
         self.sample_rate = sample_rate
-        self.samples_per_chunk = int(sample_rate * chunk_size_ms / 1000)
-        self.buffer = np.array([], dtype=np.float32)
+        self.samples_per_chunk = int((chunk_size_ms / 1000) * sample_rate)
+        self.overlap_samples = int((self.overlap_ms / 1000) * sample_rate)
+        self.buffer: list[float] = []
 
-    def add_samples(
-        self, samples: np.ndarray, is_end: bool = False
-    ) -> list[np.ndarray]:
-        """Add samples to buffer and return complete chunks if available.
+    def add_samples(self, new_samples: np.ndarray) -> list[np.ndarray]:
+        """Add new samples to the buffer and return complete chunks if available.
 
         Args:
-            samples: New audio samples to add
-            is_end: Whether this is the last batch of samples
+            new_samples: New audio samples to add
 
         Returns:
-            List of complete chunks ready for processing
+            List of complete chunks (if any)
         """
         # Add new samples to buffer
-        self.buffer = np.concatenate([self.buffer, samples])
+        self.buffer.extend(new_samples.tolist())
 
         # Extract complete chunks
         complete_chunks = []
         while len(self.buffer) >= self.samples_per_chunk:
-            chunk = self.buffer[: self.samples_per_chunk]
+            chunk = np.array(self.buffer[: self.samples_per_chunk], dtype=np.float32)
             complete_chunks.append(chunk)
-            self.buffer = self.buffer[self.samples_per_chunk :]
-
-        # If this is the end of the stream and we have remaining samples,
-        # pad the last chunk with zeros to reach the desired chunk size
-        if is_end and len(self.buffer) > 0:
-            padding_size = self.samples_per_chunk - len(self.buffer)
-            padded_chunk = np.pad(self.buffer, (0, padding_size), mode="constant")
-            complete_chunks.append(padded_chunk)
-            self.buffer = np.array([], dtype=np.float32)
+            # Keep the overlapping portion for the next chunk
+            self.buffer = self.buffer[self.samples_per_chunk - self.overlap_samples :]
 
         return complete_chunks
+
+    def get_remaining_samples(self) -> np.ndarray:
+        """Get any remaining samples in the buffer and clear it."""
+        if not self.buffer:
+            return np.array([], dtype=np.float32)
+
+        samples = np.array(self.buffer, dtype=np.float32)
+        self.buffer = []
+        return samples
 
 
 def prepare_openai_audio(samples: np.ndarray) -> Optional[Path]:
@@ -74,7 +80,7 @@ def prepare_openai_audio(samples: np.ndarray) -> Optional[Path]:
         with wave.open(str(temp_path), "wb") as wf:
             wf.setnchannels(1)  # mono
             wf.setsampwidth(2)  # 2 bytes for int16
-            wf.setframerate(16000)  # whisper expects 16kHz
+            wf.setframerate(WHISPER_SAMPLE_RATE_HZ)
             wf.writeframes(audio_data.tobytes())
 
         return temp_path

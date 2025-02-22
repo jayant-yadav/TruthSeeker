@@ -3,9 +3,9 @@ import tempfile
 from asyncio import Semaphore
 from datetime import datetime
 from pathlib import Path
-from typing import List
 
 import numpy as np
+from app.audio_utils import WHISPER_SAMPLE_RATE_HZ, AudioBuffer
 from app.transcription import Transcriber, TranscriptionMethod, TranscriptionResult
 from dotenv import load_dotenv
 from fastapi import (
@@ -26,50 +26,6 @@ class TranscriptionConfig(BaseModel):
     save_transcript: bool = True
     chunk_size_ms: int = 5000
     overlap_ms: int = 0
-
-
-class AudioBuffer:
-    def __init__(self, chunk_size_ms: int, sample_rate: int = 16000):
-        """Initialize audio buffer for accumulating samples.
-
-        Args:
-            chunk_size_ms: Size of each chunk in milliseconds
-            sample_rate: Sample rate of the audio (default 16kHz for Whisper)
-        """
-        self.chunk_size_ms = chunk_size_ms
-        self.sample_rate = sample_rate
-        self.samples_per_chunk = int((chunk_size_ms / 1000) * sample_rate)
-        self.buffer: List[float] = []
-
-    def add_samples(self, new_samples: np.ndarray) -> List[np.ndarray]:
-        """Add new samples to the buffer and return complete chunks if available.
-
-        Args:
-            new_samples: New audio samples to add
-
-        Returns:
-            List of complete chunks (if any)
-        """
-        # Add new samples to buffer
-        self.buffer.extend(new_samples.tolist())
-
-        # Extract complete chunks
-        complete_chunks = []
-        while len(self.buffer) >= self.samples_per_chunk:
-            chunk = np.array(self.buffer[: self.samples_per_chunk], dtype=np.float32)
-            complete_chunks.append(chunk)
-            self.buffer = self.buffer[self.samples_per_chunk :]
-
-        return complete_chunks
-
-    def get_remaining_samples(self) -> np.ndarray:
-        """Get any remaining samples in the buffer and clear it."""
-        if not self.buffer:
-            return np.array([], dtype=np.float32)
-
-        samples = np.array(self.buffer, dtype=np.float32)
-        self.buffer = []
-        return samples
 
 
 app = FastAPI()
@@ -169,8 +125,14 @@ async def websocket_endpoint(websocket: WebSocket):
         print("Transcriber streaming mode initialized")
 
         # Create audio buffer for accumulating samples
-        audio_buffer = AudioBuffer(chunk_size_ms=active_config.chunk_size_ms)
-        print(f"Audio buffer created with chunk size {active_config.chunk_size_ms}ms")
+        audio_buffer = AudioBuffer(
+            chunk_size_ms=active_config.chunk_size_ms,
+            overlap_ms=active_config.overlap_ms,
+            sample_rate=WHISPER_SAMPLE_RATE_HZ,
+        )
+        print(
+            f"Audio buffer created with chunk size {active_config.chunk_size_ms}ms and overlap {active_config.overlap_ms}ms"
+        )
 
         while True:
             # Receive message
@@ -249,5 +211,5 @@ async def websocket_endpoint(websocket: WebSocket):
         transcriber.stop_stream()
         try:
             await websocket.close()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error closing websocket: {e}")
