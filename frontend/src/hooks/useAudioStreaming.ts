@@ -254,6 +254,12 @@ export const useAudioStreaming = ({ onTranscriptionUpdate }: UseAudioStreamingPr
             };
 
             if (audioFile) {
+                console.log('Processing audio file:', {
+                    name: audioFile.name,
+                    type: audioFile.type,
+                    size: `${(audioFile.size / 1024 / 1024).toFixed(2)} MB`
+                });
+
                 const arrayBuffer = await audioFile.arrayBuffer();
                 const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
                 sourceNodeRef.current = audioContextRef.current.createBufferSource();
@@ -277,6 +283,8 @@ export const useAudioStreaming = ({ onTranscriptionUpdate }: UseAudioStreamingPr
                 });
                 sourceNodeRef.current.start();
             } else {
+                console.log('Starting microphone input');
+
                 const stream = await navigator.mediaDevices.getUserMedia({
                     audio: {
                         channelCount: 1,
@@ -288,7 +296,13 @@ export const useAudioStreaming = ({ onTranscriptionUpdate }: UseAudioStreamingPr
                 mediaStreamRef.current = stream;
                 sourceNodeRef.current = audioContextRef.current.createMediaStreamSource(stream);
                 sourceNodeRef.current.connect(workletNodeRef.current);
-                console.log('Started microphone input');
+
+                // Log the actual track settings we got
+                const audioTrack = stream.getAudioTracks()[0];
+                if (audioTrack) {
+                    const settings = audioTrack.getSettings();
+                    console.log('Actual microphone settings:', settings);
+                }
             }
 
             // Handle transcription results
