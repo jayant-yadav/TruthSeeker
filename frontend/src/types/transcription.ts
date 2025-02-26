@@ -1,7 +1,7 @@
 export interface TranscriptionResult {
     text: string;
     timestamp: string;
-    audio_duration: number;
+    time_spent_sec: number;
     method: string;
 }
 

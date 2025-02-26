@@ -1,4 +1,5 @@
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -22,7 +23,7 @@ class TranscriptionMethod(str, Enum):
 class TranscriptionResult(BaseModel):
     text: str
     timestamp: str
-    audio_duration: float
+    time_spent_sec: float
     method: TranscriptionMethod
 
 
@@ -127,6 +128,8 @@ class Transcriber:
         Args:
             audio_path: Path to audio file
         """
+        start_time = time.time()
+
         if self.method == TranscriptionMethod.LOCAL_WHISPER:
             if self.local_model is None:
                 raise RuntimeError("Local Whisper model not initialized")
@@ -142,13 +145,14 @@ class Transcriber:
                 )
                 text = response.text
 
+        time_spent = time.time() - start_time
         print(f"Transcribed text: {text}")
+        print(f"Transcription took {time_spent:.2f} seconds")
 
-        audio_info = self._get_audio_info(audio_path)
         return TranscriptionResult(
             text=text,
             timestamp=datetime.now().isoformat(),
-            audio_duration=audio_info["duration_seconds"],
+            time_spent_sec=time_spent,
             method=self.method,
         )
 

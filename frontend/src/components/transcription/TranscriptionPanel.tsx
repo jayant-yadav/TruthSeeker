@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAudioStreaming } from '../../hooks/useAudioStreaming';
 import { TranscriptionResult } from '../../types/transcription';
 
@@ -7,11 +7,13 @@ type InputMode = 'file' | 'microphone';
 export const TranscriptionPanel: React.FC = () => {
     const [inputMode, setInputMode] = useState<InputMode>('file');
     const [file, setFile] = useState<File | null>(null);
+    const [audioDuration, setAudioDuration] = useState<number | null>(null);
     const [result, setResult] = useState<TranscriptionResult | null>(null);
     const [streamingResult, setStreamingResult] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [micPermission, setMicPermission] = useState<boolean | null>(null);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
 
     const { isStreaming, isEndOfFile, error: streamingError, startStreaming, stopStreaming } = useAudioStreaming({
         onTranscriptionUpdate: (result) => {
@@ -50,11 +52,35 @@ export const TranscriptionPanel: React.FC = () => {
         setError(null);
         setResult(null);
         setStreamingResult('');
+        setAudioDuration(null);
 
         // Reset mic permission check when switching to file mode
         if (mode === 'file') {
             setMicPermission(null);
         }
+    };
+
+    const calculateAudioDuration = (file: File) => {
+        const url = URL.createObjectURL(file);
+
+        if (!audioRef.current) {
+            audioRef.current = new Audio();
+        }
+
+        audioRef.current.src = url;
+
+        audioRef.current.onloadedmetadata = () => {
+            if (audioRef.current) {
+                setAudioDuration(audioRef.current.duration);
+                // Revoke the URL to free up memory
+                URL.revokeObjectURL(url);
+            }
+        };
+
+        audioRef.current.onerror = () => {
+            setError('Could not determine audio duration');
+            URL.revokeObjectURL(url);
+        };
     };
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -64,6 +90,10 @@ export const TranscriptionPanel: React.FC = () => {
             setError(null);
             setResult(null);
             setStreamingResult('');
+            setAudioDuration(null);
+
+            // Calculate audio duration
+            calculateAudioDuration(selectedFile);
 
             // If we were streaming, stop
             if (isStreaming) {
@@ -170,6 +200,7 @@ export const TranscriptionPanel: React.FC = () => {
                         {file && (
                             <div className="mt-1 text-sm text-gray-600">
                                 Selected: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                                {audioDuration !== null && <span> • Duration: {audioDuration.toFixed(2)}s</span>}
                             </div>
                         )}
                     </div>
@@ -277,8 +308,8 @@ export const TranscriptionPanel: React.FC = () => {
                         <div className="p-4 bg-gray-100 rounded">
                             <p>{result.text}</p>
                             <div className="mt-2 text-sm text-gray-600">
-                                <p>Duration: {result.audio_duration.toFixed(2)}s</p>
                                 <p>Method: {result.method}</p>
+                                <p>Processing time: {result.time_spent_sec.toFixed(2)}s</p>
                             </div>
                         </div>
                     </div>
