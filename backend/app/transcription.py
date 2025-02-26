@@ -187,7 +187,13 @@ class Transcriber:
                     raise RuntimeError("Local Whisper model not initialized")
                 # Use last chunk's text as initial prompt if available
                 segments = self.local_model.transcribe(
-                    chunk, n_processors=1, initial_prompt=self.last_chunk_text
+                    chunk,
+                    n_processors=1,
+                    initial_prompt=self.last_chunk_text,
+                    single_segment=True,
+                    print_realtime=False,
+                    print_progress=False,
+                    print_timestamps=False,
                 )
                 text = " ".join([segment.text for segment in segments])
             else:

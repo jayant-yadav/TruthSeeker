@@ -24,8 +24,8 @@ class TranscriptionConfig(BaseModel):
     model_checkpoint: str = "whisper-1"
     method: TranscriptionMethod = TranscriptionMethod.OPENAI_WHISPER
     save_transcript: bool = True
-    chunk_size_ms: int = 5000
-    overlap_ms: int = 0
+    chunk_size_ms: int = 2000
+    overlap_ms: int = 200
 
 
 app = FastAPI()
@@ -119,6 +119,8 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     print("WebSocket connection accepted")
 
+    transcribe_func = transcriber.transcribe_chunk
+
     try:
         # Initialize streaming mode
         transcriber.start_stream()
@@ -161,7 +163,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
                         # Process each complete chunk
                         for chunk in complete_chunks:
-                            result = transcriber.transcribe_chunk(chunk)
+                            result = transcribe_func(chunk)
                             await websocket.send_json({
                                 "text": result.text,
                                 "is_final": False,
@@ -180,7 +182,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             # Process any remaining samples
                             remaining_samples = audio_buffer.get_remaining_samples()
                             if len(remaining_samples) > 0:
-                                result = transcriber.transcribe_chunk(
+                                result = transcribe_func(
                                     remaining_samples, is_final=True
                                 )
                                 await websocket.send_json({
