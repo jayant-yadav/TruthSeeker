@@ -150,7 +150,6 @@ export const useAudioStreaming = ({ onTranscriptionUpdate }: UseAudioStreamingPr
                     messageHandler = (event: MessageEvent) => {
                         try {
                             const data = JSON.parse(event.data);
-                            console.log('Received message while waiting for final:', data);
                             if (data.is_final) {
                                 console.log('Received final confirmation from backend');
                                 resolve();

@@ -212,6 +212,10 @@ async def websocket_endpoint(websocket: WebSocket):
         print("Cleaning up connection")
         transcriber.stop_stream()
         try:
-            await websocket.close()
+            # Check if the connection is already closed before trying to close it
+            if not websocket.client_state.DISCONNECTED:
+                await websocket.close()
+            else:
+                print("WebSocket already closed by client")
         except Exception as e:
             print(f"Error closing websocket: {e}")
