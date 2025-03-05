@@ -1,8 +1,12 @@
+import logging
 import tempfile
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 WHISPER_SAMPLE_RATE_HZ = 16000
 
@@ -29,13 +33,19 @@ class AudioBuffer:
         """Add new samples to the buffer and return complete chunks if available.
 
         Args:
-            new_samples: New audio samples to add
+            new_samples: New audio samples to add (numpy array)
 
         Returns:
             List of complete chunks (if any)
         """
-        # Add new samples to buffer
-        self.buffer.extend(new_samples.tolist())
+        try:
+            # Convert numpy array to list of floats and add to buffer
+            samples_list = new_samples.astype(np.float32).flatten().tolist()
+            self.buffer.extend(samples_list)
+        except Exception as e:
+            logger.error(f"Error adding samples to buffer: {e}")
+            # Return empty list if we can't process the samples
+            return []
 
         # Extract complete chunks
         complete_chunks = []
@@ -86,7 +96,7 @@ def prepare_openai_audio(samples: np.ndarray) -> Optional[Path]:
         return temp_path
 
     except Exception as e:
-        print(f"Error preparing audio for OpenAI: {e}")
+        logger.error(f"Error preparing audio for OpenAI: {e}")
         if "temp_path" in locals():
             temp_path.unlink(missing_ok=True)
         return None

@@ -1,12 +1,19 @@
 import json
+import logging
 import tempfile
 from asyncio import Semaphore
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
-from app.audio_utils import WHISPER_SAMPLE_RATE_HZ, AudioBuffer
-from app.transcription import Transcriber, TranscriptionMethod, TranscriptionResult
+from app.transcription.common import (
+    BaseTranscriber,
+    TranscriptionMethod,
+    TranscriptionResult,
+)
+from app.transcription.local_whisper import LocalWhisperTranscriber
+from app.transcription.openai_whisper import OpenAIWhisperTranscriber
+from app.transcription.utils import WHISPER_SAMPLE_RATE_HZ, AudioBuffer
 from dotenv import load_dotenv
 from fastapi import (
     FastAPI,
@@ -16,6 +23,14 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(), logging.FileHandler("app.log")],
+)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -39,9 +54,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+def create_transcriber(
+    method: TranscriptionMethod, model_checkpoint: str
+) -> BaseTranscriber:
+    """Factory function to create the appropriate transcriber based on the method.
+
+    Args:
+        method: The transcription method to use
+        model_checkpoint: Name/identifier of the model to use
+
+    Returns:
+        An instance of the appropriate transcriber
+
+    Raises:
+        ValueError: If the method is not supported
+    """
+    if method == TranscriptionMethod.LOCAL_WHISPER:
+        return LocalWhisperTranscriber(model_checkpoint)
+    elif method == TranscriptionMethod.OPENAI_WHISPER:
+        return OpenAIWhisperTranscriber(model_checkpoint)
+    else:
+        raise ValueError(f"Unsupported transcription method: {method}")
+
+
 # Global state
 active_config = TranscriptionConfig()
-transcriber = Transcriber(
+transcriber = create_transcriber(
     method=active_config.method,
     model_checkpoint=active_config.model_checkpoint,
 )
@@ -73,10 +112,9 @@ async def update_config(config: TranscriptionConfig):
         # Update the active configuration
         active_config = config
 
-        # Create a new transcriber with the updated config
-        transcriber = Transcriber(
-            method=config.method,
-            model_checkpoint=config.model_checkpoint,
+        transcriber = create_transcriber(
+            method=active_config.method,
+            model_checkpoint=active_config.model_checkpoint,
         )
 
         return active_config
@@ -115,16 +153,14 @@ async def transcribe_file(file: UploadFile = File(...)):
 @app.websocket("/stream")
 async def websocket_endpoint(websocket: WebSocket):
     """Handle WebSocket connections for real-time audio streaming."""
-    print("New WebSocket connection attempt")
+    logger.info("New WebSocket connection attempt")
     await websocket.accept()
-    print("WebSocket connection accepted")
-
-    transcribe_func = transcriber.transcribe_chunk
+    logger.info("WebSocket connection accepted")
 
     try:
         # Initialize streaming mode
         transcriber.start_stream()
-        print("Transcriber streaming mode initialized")
+        logger.info("Transcriber streaming mode initialized")
 
         # Create audio buffer for accumulating samples
         audio_buffer = AudioBuffer(
@@ -132,7 +168,7 @@ async def websocket_endpoint(websocket: WebSocket):
             overlap_ms=active_config.overlap_ms,
             sample_rate=WHISPER_SAMPLE_RATE_HZ,
         )
-        print(
+        logger.info(
             f"Audio buffer created with chunk size {active_config.chunk_size_ms}ms and overlap {active_config.overlap_ms}ms"
         )
 
@@ -141,7 +177,7 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 message = await websocket.receive()
             except Exception as e:
-                print(f"Error receiving message: {e}")
+                logger.error(f"Error receiving message: {e}")
                 break
 
             try:
@@ -151,7 +187,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     data_len = len(audio_data) if audio_data else 0
 
                     if not audio_data or data_len == 0:
-                        print("Skipping empty audio data")
+                        logger.debug("Skipping empty audio data")
                         continue
 
                     try:
@@ -163,26 +199,26 @@ async def websocket_endpoint(websocket: WebSocket):
 
                         # Process each complete chunk
                         for chunk in complete_chunks:
-                            result = transcribe_func(chunk)
+                            result = transcriber.transcribe_chunk(chunk)
                             await websocket.send_json({
                                 "text": result.text,
                                 "is_final": False,
                             })
                     except Exception as e:
-                        print(f"Error processing audio data: {e}")
+                        logger.error(f"Error processing audio data: {e}")
                         continue
 
                 elif (message["type"] == "websocket.receive") and ("text" in message):
                     # Handle control message
                     try:
                         data = json.loads(message["text"])
-                        print(f"Received control message: {data}")
+                        logger.debug(f"Received control message: {data}")
                         if data.get("isLastChunk"):
-                            print("Processing final chunk")
+                            logger.info("Processing final chunk")
                             # Process any remaining samples
                             remaining_samples = audio_buffer.get_remaining_samples()
                             if len(remaining_samples) > 0:
-                                result = transcribe_func(
+                                result = transcriber.transcribe_chunk(
                                     remaining_samples, is_final=True
                                 )
                                 await websocket.send_json({
@@ -190,32 +226,32 @@ async def websocket_endpoint(websocket: WebSocket):
                                     "is_final": True,
                                 })
 
-                            print(f"Processed final chunk: {result.text}")
+                            logger.info(f"Processed final chunk: {result.text}")
 
                             continue
 
                     except json.JSONDecodeError as e:
-                        print(f"Error decoding JSON message: {e}")
+                        logger.error(f"Error decoding JSON message: {e}")
                         continue
 
                 elif message["type"] == "websocket.disconnect":
-                    print("Client disconnected")
+                    logger.info("Client disconnected")
                     break
 
             except Exception as e:
-                print(f"Error handling message: {e}")
+                logger.error(f"Error handling message: {e}")
                 continue
 
     except Exception as e:
-        print(f"Error in WebSocket connection: {e}")
+        logger.error(f"Error in WebSocket connection: {e}")
     finally:
-        print("Cleaning up connection")
+        logger.info("Cleaning up connection")
         transcriber.stop_stream()
         try:
             # Check if the connection is already closed before trying to close it
             if not websocket.client_state.DISCONNECTED:
                 await websocket.close()
             else:
-                print("WebSocket already closed by client")
+                logger.info("WebSocket already closed by client")
         except Exception as e:
-            print(f"Error closing websocket: {e}")
+            logger.error(f"Error closing websocket: {e}")
