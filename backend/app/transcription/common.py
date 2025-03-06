@@ -19,6 +19,7 @@ WHISPER_CPP_MODEL_PATH = Path("./models/").resolve()
 class TranscriptionMethod(str, Enum):
     LOCAL_WHISPER = "local_whisper"
     OPENAI_WHISPER = "openai_whisper"
+    GOOGLE_SPEECH = "google_speech"
 
 
 class TranscriptionResult(BaseModel):

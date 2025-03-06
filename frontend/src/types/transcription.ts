@@ -20,4 +20,4 @@ export interface TranscriptionConfig {
 
 export const LOCAL_MODEL_CHECKPOINTS = ['medium.en', 'large-v3', 'large-v2', 'large-v3-turbo', 'large-v3-turbo-q5_0'] as const;
 export const OPENAI_MODEL_CHECKPOINTS = ['whisper-1'] as const;
-export const TRANSCRIPTION_METHODS = ['local_whisper', 'openai_whisper'] as const;
+export const TRANSCRIPTION_METHODS = ['local_whisper', 'openai_whisper', 'google_speech'] as const;

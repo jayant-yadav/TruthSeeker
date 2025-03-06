@@ -11,6 +11,7 @@ from app.transcription.common import (
     TranscriptionMethod,
     TranscriptionResult,
 )
+from app.transcription.google_speech import GoogleSpeechTranscriber
 from app.transcription.local_whisper import LocalWhisperTranscriber
 from app.transcription.openai_whisper import OpenAIWhisperTranscriber
 from app.transcription.utils import WHISPER_SAMPLE_RATE_HZ, AudioBuffer
@@ -41,6 +42,7 @@ class TranscriptionConfig(BaseModel):
     save_transcript: bool = True
     chunk_size_ms: int = 2000
     overlap_ms: int = 200
+    direct_streaming: bool = False  # Option to stream directly without buffering
 
 
 app = FastAPI()
@@ -74,6 +76,8 @@ def create_transcriber(
         return LocalWhisperTranscriber(model_checkpoint)
     elif method == TranscriptionMethod.OPENAI_WHISPER:
         return OpenAIWhisperTranscriber(model_checkpoint)
+    elif method == TranscriptionMethod.GOOGLE_SPEECH:
+        return GoogleSpeechTranscriber(model_checkpoint)
     else:
         raise ValueError(f"Unsupported transcription method: {method}")
 
@@ -97,15 +101,89 @@ def save_transcript(result: TranscriptionResult):
         json.dump(result.model_dump(), f, indent=2)
 
 
+# Helper function to determine if direct streaming should be used
+def should_use_direct_streaming(config: TranscriptionConfig) -> bool:
+    """Determine if direct streaming should be used based on the config.
+
+    Google Speech API works best with direct streaming, while Whisper-based
+    methods work better with buffered streaming.
+
+    Args:
+        config: The current transcription configuration
+
+    Returns:
+        bool: True if direct streaming should be used, False otherwise
+    """
+    # Always use direct streaming if explicitly configured
+    if config.direct_streaming:
+        return True
+
+    # For Google Speech, recommend direct streaming by default
+    if config.method == TranscriptionMethod.GOOGLE_SPEECH:
+        return True
+
+    # For Whisper-based methods, use buffered streaming by default
+    return False
+
+
+def adapt_audio_format(samples: np.ndarray, method: TranscriptionMethod) -> np.ndarray:
+    """Adapt audio format for different transcription methods.
+
+    Args:
+        samples: Audio samples as numpy array
+        method: The transcription method
+
+    Returns:
+        Adapted audio samples
+    """
+    # Google Speech API expects int16 samples
+    if method == TranscriptionMethod.GOOGLE_SPEECH:
+        # If samples are float32 in [-1.0, 1.0] range, convert to int16
+        if samples.dtype == np.float32:
+            return (samples * 32768.0).astype(np.int16)
+
+    # For other methods, ensure float32 format
+    if samples.dtype != np.float32:
+        return samples.astype(np.float32)
+
+    return samples
+
+
 @app.get("/config")
 async def get_config():
-    """Get the current active configuration."""
+    """Get the current active configuration.
+
+    Returns:
+        TranscriptionConfig: The current configuration including:
+        - model_checkpoint: The model to use for transcription
+        - method: The transcription method (LOCAL_WHISPER, OPENAI_WHISPER, GOOGLE_SPEECH)
+        - save_transcript: Whether to save transcripts to disk
+        - chunk_size_ms: Size of audio chunks in milliseconds
+        - overlap_ms: Overlap between consecutive chunks in milliseconds
+        - direct_streaming: Whether to stream audio directly to the transcriber without buffering
+    """
     return active_config
 
 
 @app.post("/config")
 async def update_config(config: TranscriptionConfig):
-    """Update the configuration and reinitialize the transcriber."""
+    """Update the configuration and reinitialize the transcriber.
+
+    Args:
+        config: The new configuration to apply
+
+    Returns:
+        TranscriptionConfig: The updated configuration
+
+    Note:
+        Setting direct_streaming=True will bypass the audio buffer and send audio
+        directly to the transcriber. This may result in lower quality transcriptions
+        for Whisper-based methods but can reduce latency.
+
+        For Google Speech API, direct streaming is recommended and will be used by
+        default even if direct_streaming=False, unless you explicitly set it to False
+        and are aware of the potential issues.
+    """
     global active_config, transcriber
 
     async with transcriber_lock:
@@ -162,15 +240,23 @@ async def websocket_endpoint(websocket: WebSocket):
         transcriber.start_stream()
         logger.info("Transcriber streaming mode initialized")
 
-        # Create audio buffer for accumulating samples
-        audio_buffer = AudioBuffer(
-            chunk_size_ms=active_config.chunk_size_ms,
-            overlap_ms=active_config.overlap_ms,
-            sample_rate=WHISPER_SAMPLE_RATE_HZ,
-        )
-        logger.info(
-            f"Audio buffer created with chunk size {active_config.chunk_size_ms}ms and overlap {active_config.overlap_ms}ms"
-        )
+        # Determine if we should use direct streaming based on the transcription method
+        use_direct_streaming = should_use_direct_streaming(active_config)
+
+        # Create audio buffer for accumulating samples if not using direct streaming
+        if not use_direct_streaming:
+            audio_buffer = AudioBuffer(
+                chunk_size_ms=active_config.chunk_size_ms,
+                overlap_ms=active_config.overlap_ms,
+                sample_rate=WHISPER_SAMPLE_RATE_HZ,
+            )
+            logger.info(
+                f"Audio buffer created with chunk size {active_config.chunk_size_ms}ms and overlap {active_config.overlap_ms}ms"
+            )
+        else:
+            logger.info(
+                f"Direct streaming mode enabled for {active_config.method} - bypassing audio buffer"
+            )
 
         while True:
             # Receive message
@@ -194,16 +280,40 @@ async def websocket_endpoint(websocket: WebSocket):
                         # Convert to numpy array
                         samples = np.frombuffer(audio_data, dtype=np.float32)
 
-                        # Add samples to buffer and get complete chunks
-                        complete_chunks = audio_buffer.add_samples(samples)
+                        if use_direct_streaming:
+                            # Adapt audio format for the specific transcription method
+                            adapted_samples = adapt_audio_format(
+                                samples, active_config.method
+                            )
 
-                        # Process each complete chunk
-                        for chunk in complete_chunks:
-                            result = transcriber.transcribe_chunk(chunk)
-                            await websocket.send_json({
-                                "text": result.text,
-                                "is_final": False,
-                            })
+                            # Stream directly to transcriber without buffering
+                            result = transcriber.transcribe_chunk(adapted_samples)
+
+                            # Only send response if there's text to send
+                            if result.text:
+                                await websocket.send_json({
+                                    "text": result.text,
+                                    "is_final": False,
+                                })
+                        else:
+                            # Add samples to buffer and get complete chunks
+                            complete_chunks = audio_buffer.add_samples(samples)
+
+                            # Process each complete chunk
+                            for chunk in complete_chunks:
+                                # Adapt audio format for the specific transcription method
+                                adapted_chunk = adapt_audio_format(
+                                    chunk, active_config.method
+                                )
+
+                                result = transcriber.transcribe_chunk(adapted_chunk)
+
+                                # Only send response if there's text to send
+                                if result.text:
+                                    await websocket.send_json({
+                                        "text": result.text,
+                                        "is_final": False,
+                                    })
                     except Exception as e:
                         logger.error(f"Error processing audio data: {e}")
                         continue
@@ -215,11 +325,50 @@ async def websocket_endpoint(websocket: WebSocket):
                         logger.debug(f"Received control message: {data}")
                         if data.get("isLastChunk"):
                             logger.info("Processing final chunk")
-                            # Process any remaining samples
-                            remaining_samples = audio_buffer.get_remaining_samples()
-                            if len(remaining_samples) > 0:
+                            # Process any remaining samples if not using direct streaming
+                            if not use_direct_streaming:
+                                remaining_samples = audio_buffer.get_remaining_samples()
+                                if len(remaining_samples) > 0:
+                                    # Adapt audio format for the specific transcription method
+                                    adapted_remaining = adapt_audio_format(
+                                        remaining_samples, active_config.method
+                                    )
+
+                                    result = transcriber.transcribe_chunk(
+                                        adapted_remaining, is_final=True
+                                    )
+                                    await websocket.send_json({
+                                        "text": result.text,
+                                        "is_final": True,
+                                    })
+                                else:
+                                    # No remaining samples, just send a final empty chunk
+                                    empty_array = (
+                                        np.array([], dtype=np.int16)
+                                        if active_config.method
+                                        == TranscriptionMethod.GOOGLE_SPEECH
+                                        else np.array([], dtype=np.float32)
+                                    )
+
+                                    result = transcriber.transcribe_chunk(
+                                        empty_array, is_final=True
+                                    )
+                                    await websocket.send_json({
+                                        "text": result.text,
+                                        "is_final": True,
+                                    })
+                            else:
+                                # For direct streaming, send a final empty chunk
+                                # Use the appropriate data type based on the transcription method
+                                empty_array = (
+                                    np.array([], dtype=np.int16)
+                                    if active_config.method
+                                    == TranscriptionMethod.GOOGLE_SPEECH
+                                    else np.array([], dtype=np.float32)
+                                )
+
                                 result = transcriber.transcribe_chunk(
-                                    remaining_samples, is_final=True
+                                    empty_array, is_final=True
                                 )
                                 await websocket.send_json({
                                     "text": result.text,

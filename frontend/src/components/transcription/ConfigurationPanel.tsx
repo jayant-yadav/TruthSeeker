@@ -2,9 +2,40 @@ import React, { useState } from 'react';
 import { TranscriptionConfig, LOCAL_MODEL_CHECKPOINTS, OPENAI_MODEL_CHECKPOINTS, TRANSCRIPTION_METHODS } from '../../types/transcription';
 import { useTranscriptionConfig } from '../../hooks/useTranscriptionConfig';
 
+// Define Google Speech model checkpoints
+const GOOGLE_SPEECH_MODEL_CHECKPOINTS = ['default'] as const;
+
+// Helper function to format method names for display
+const formatMethodName = (method: string): string => {
+    switch (method) {
+        case 'local_whisper':
+            return 'Local Whisper';
+        case 'openai_whisper':
+            return 'OpenAI Whisper';
+        case 'google_speech':
+            return 'Google Speech';
+        default:
+            return method;
+    }
+};
+
 export const ConfigurationPanel: React.FC = () => {
     const { config, activeConfig, isLoading, error, updateConfig, setConfig } = useTranscriptionConfig();
     const [isUpdating, setIsUpdating] = useState(false);
+
+    // Helper function to get model checkpoints based on method
+    const getModelCheckpoints = (method: string) => {
+        switch (method) {
+            case 'local_whisper':
+                return LOCAL_MODEL_CHECKPOINTS;
+            case 'openai_whisper':
+                return OPENAI_MODEL_CHECKPOINTS;
+            case 'google_speech':
+                return GOOGLE_SPEECH_MODEL_CHECKPOINTS;
+            default:
+                return [];
+        }
+    };
 
     if (isLoading) {
         return (
@@ -31,9 +62,13 @@ export const ConfigurationPanel: React.FC = () => {
 
         // If method changes, update model_checkpoint to a valid value for the new method
         if (field === 'method') {
-            newConfig.model_checkpoint = value === 'local_whisper'
-                ? LOCAL_MODEL_CHECKPOINTS[0]
-                : OPENAI_MODEL_CHECKPOINTS[0];
+            if (value === 'local_whisper') {
+                newConfig.model_checkpoint = LOCAL_MODEL_CHECKPOINTS[0];
+            } else if (value === 'openai_whisper') {
+                newConfig.model_checkpoint = OPENAI_MODEL_CHECKPOINTS[0];
+            } else if (value === 'google_speech') {
+                newConfig.model_checkpoint = GOOGLE_SPEECH_MODEL_CHECKPOINTS[0];
+            }
         }
 
         setConfig(newConfig);
@@ -66,7 +101,7 @@ export const ConfigurationPanel: React.FC = () => {
                                 className="block w-full mt-1 p-2 border rounded"
                             >
                                 {TRANSCRIPTION_METHODS.map(method => (
-                                    <option key={method} value={method}>{method}</option>
+                                    <option key={method} value={method}>{formatMethodName(method)}</option>
                                 ))}
                             </select>
                         </label>
@@ -80,7 +115,7 @@ export const ConfigurationPanel: React.FC = () => {
                                 onChange={(e) => handleConfigChange('model_checkpoint', e.target.value)}
                                 className="block w-full mt-1 p-2 border rounded"
                             >
-                                {(config.method === 'local_whisper' ? LOCAL_MODEL_CHECKPOINTS : OPENAI_MODEL_CHECKPOINTS).map(checkpoint => (
+                                {getModelCheckpoints(config.method).map(checkpoint => (
                                     <option key={checkpoint} value={checkpoint}>{checkpoint}</option>
                                 ))}
                             </select>
