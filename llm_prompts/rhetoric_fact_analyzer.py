@@ -11,90 +11,83 @@ from rich.console import Console
 async def get_rhetorical_analysis(client, topic_of_debate, gang_violence_debate):
    
     completion = client.chat.completions.create(
-    model="gpt-4o-mini",
-    messages=[
-        {"role": "developer", 
-         "content": f"You are a helpful assistant to a debate moderator and extremely knowledable in debate analysis. Help the moderator by finding rhetorical strategies and fallacies in the arguments provided. \n\
-            The debate is on the topic: {topic_of_debate}. The debate consists of multiple speakers and therefore, find these rhetorical strategies for each speaker.\n\
-            Give the quote and their corresponding type of rhetorical strategies used in the following classes: 'Ethos, Pathos, and Logos', 'repetition', 'rhetorical questions', 'hyperbole', 'insults and accusations'.\
-            Also provide an argument map in mermaid format, with conculsion, premises, co-premises, objections, counterarguments, rebuttals, inferences and lemmas if only if available in the arument. Do not use prior knowledge."
-        },
-         
-        {
-            "role": "user",
-            "content": f"{gang_violence_debate}"
-        }
-    ],
-    response_format={
-        "type": "json_schema", 
-        "json_schema": {
-            "name": "moderation_help",
-            "strict": True,
-            "schema":{
-                "type": "object",
-                "properties": {
-                    "rhetorical_strategies": {
-                        "type": "array",
-                        "description": "Rhetorical stategies in the argument",
-                        "items": {"$ref": "#/$defs/rhetorical_strategy"}
-                    },
-                    "fallacies": {
-                        "type": "array",
-                        "description": "Fallacies in the argument",
-                        "items": {"$ref": "#/$defs/fallacy"}
-                    },
-                    "argument_map": {
-                        "type": "string",
-                        "description": "A mermaid graph representing the argument map",
-                    },
-                    "speaker": {
-                        "type": "array",
-                        "description": "The speakers in the debate and their arguments",
-                        "items": {
-                            "$ref": "#"
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "developer", 
+            "content": f"You are a helpful assistant to a debate moderator and extremely knowledable in debate analysis. Help the moderator by finding rhetorical strategies and fallacies in the arguments provided. \n\
+                The debate is on the topic: {topic_of_debate}. \
+                Give the quote and their corresponding type of rhetorical strategies used in the following classes: 'Ethos, Pathos, and Logos', 'repetition', 'rhetorical questions', 'hyperbole', 'insults and accusations'.\
+                Also provide an argument map in mermaid format, with conculsion, premises, co-premises, objections, counterarguments, rebuttals, inferences and lemmas if only if available in the arument. Do not use prior knowledge."
+            },
+            
+            {
+                "role": "user",
+                "content": f"{gang_violence_debate}"
+            }
+        ],
+        response_format={
+            "type": "json_schema", 
+            "json_schema": {
+                "name": "moderation_help",
+                "strict": True,
+                "schema":{
+                    "type": "object",
+                    "properties": {
+                        "rhetorical_strategies": {
+                            "type": "array",
+                            "description": "Rhetorical stategies in the argument",
+                            "items": {"$ref": "#/$defs/rhetorical_strategy"}
                         },
+                        "fallacies": {
+                            "type": "array",
+                            "description": "Fallacies in the argument",
+                            "items": {"$ref": "#/$defs/fallacy"}
+                        },
+                        "argument_map": {
+                            "type": "string",
+                            "description": "A mermaid graph representing the argument map",
+                        }
                     },
-                },
-                "$defs": {
-                    "rhetorical_strategy": {
-                        "type": "object",
-                        "description": "Quote and its corresponding rhetorical stategy",
-                        "properties": {
-                            "quote": {
-                                "type": "string",
-                                "description": "The quote from the argument",
+                    "$defs": {
+                        "rhetorical_strategy": {
+                            "type": "object",
+                            "description": "Quote and its corresponding rhetorical stategy",
+                            "properties": {
+                                "quote": {
+                                    "type": "string",
+                                    "description": "The quote from the argument",
+                                },
+                                "strategy": {
+                                    "type": "string",
+                                    "description": "The rhetorical strategy in the quote",
+                                }
                             },
-                            "strategy": {
-                                "type": "string",
-                                "description": "The rhetorical strategy in the quote",
-                            }
+                            "required": ["quote", "strategy"],
+                            "additionalProperties": False
                         },
-                        "required": ["quote", "strategy"],
-                        "additionalProperties": False
-                    },
-                    "fallacy": {
-                        "type": "object",
-                        "description": "Quote and its corresponding fallacy",
-                        "properties": {
-                            "quote": {
-                                "type": "string",
-                                "description": "The quote from the argument",
+                        "fallacy": {
+                            "type": "object",
+                            "description": "Quote and its corresponding fallacy",
+                            "properties": {
+                                "quote": {
+                                    "type": "string",
+                                    "description": "The quote from the argument",
+                                },
+                                "fallacy": {
+                                    "type": "string",
+                                    "description": "The fallacy in the quote",
+                                }
                             },
-                            "fallacy": {
-                                "type": "string",
-                                "description": "The fallacy in the quote",
-                            }
-                        },
-                        "required": ["quote", "fallacy"],
-                        "additionalProperties": False
-                    }
-                },
-                "required": ["rhetorical_strategies", "fallacies", "argument_map", "speaker"],
-                "additionalProperties": False
-            } 
+                            "required": ["quote", "fallacy"],
+                            "additionalProperties": False
+                        }
+                    },
+                    "required": ["rhetorical_strategies", "fallacies", "argument_map"],
+                    "additionalProperties": False
+                } 
+            }
         }
-    }
-)
+    )
 
     llm_response = completion.choices[0].message
 
@@ -116,7 +109,7 @@ async def get_fact_check(client, topic_of_debate, gang_violence_debate):
         messages=[
             {"role": "developer", 
              "content": f"You are a helpful assistant to a debate moderator and extremely knowledable in debate analysis. Help the moderator by checking for facts in the arguments provided. \n\
-                The debate is on the topic: {topic_of_debate}. The debate consists of multiple speakers and therefore, perform fact checking for each speaker.\n\
+                The debate is on the topic: {topic_of_debate}. \
                 Give the quote and its corresponding sources from where it can be fact checked. The sources should be research papers, news channels and journal articles."
             },
              
@@ -137,13 +130,6 @@ async def get_fact_check(client, topic_of_debate, gang_violence_debate):
                             "type": "array",
                             "description": "Facts sources for quotes in the argument",
                             "items": {"$ref": "#/$defs/fact_check"}
-                        },
-                        "speaker": {
-                            "type": "array",
-                            "description": "The speakers in the debate and their arguments",
-                            "items": {
-                                "$ref": "#"
-                            },
                         },
                     },
                     "$defs": {
@@ -168,7 +154,7 @@ async def get_fact_check(client, topic_of_debate, gang_violence_debate):
                             "additionalProperties": False
                         }
                     },
-                    "required": ["fact_checks", "speaker"],
+                    "required": ["fact_checks"],
                     "additionalProperties": False
                 } 
             }
@@ -207,19 +193,35 @@ async def main():
 
     for result in results:
         if result:
-            table = Table(title="Debate Analysis Results")
+            rprint(result)
+            if 'rhetorical_strategies' in result and 'fallacies' in result and 'argument_map' in result:
+                table = Table(title="Rhetorical Analysis Results")
+                table.add_column("Type", justify="left")
+                table.add_column("Quote", justify="left")
+                table.add_column("Detail", justify="left")
 
-            # Add columns based on the keys in the result
-            for key in result.keys():
-                table.add_column(key.capitalize(), justify="left")
+                table.add_row("Rhetorical Strategies", "", "")
+                for strategy in result['rhetorical_strategies']:
+                    table.add_row("Rhetorical Strategy", strategy['quote'], strategy['strategy'])
 
-            # Add rows based on the values in the result
-            for key, value in result.items():
-                if isinstance(value, list):
-                    value = json.dumps(value, indent=4)
-                table.add_row(key.capitalize(), str(value))
+                table.add_row("Fallacies", "", "")
+                for fallacy in result['fallacies']:
+                    table.add_row("Fallacy", fallacy['quote'], fallacy['fallacy'])
 
-            console.print(table)
+                table.add_row("Argument Map", "", result['argument_map'])
+                console.print(table)
+
+            elif 'fact_checks' in result:
+                table = Table(title="Fact Check Results")
+                table.add_column("Quote", justify="left")
+                table.add_column("Source", justify="left")
+                table.add_column("URL", justify="left")
+
+                table.add_row("Fact Checks", "", "")
+                for fact_check in result['fact_checks']:
+                    table.add_row(fact_check['quote'], fact_check['source'], fact_check['url'])
+
+                console.print(table)
         else:
             console.print("No response or error occurred.", style="bold red")
 
