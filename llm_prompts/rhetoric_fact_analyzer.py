@@ -9,15 +9,14 @@ from rich.table import Table
 from rich.console import Console
 
 async def get_rhetorical_analysis(client, topic_of_debate, gang_violence_debate):
-   
+    start_time = time.time()
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "developer", 
             "content": f"You are a helpful assistant to a debate moderator and extremely knowledable in debate analysis. Help the moderator by finding rhetorical strategies and fallacies in the arguments provided. \n\
                 The debate is on the topic: {topic_of_debate}. \
-                Give the quote and their corresponding type of rhetorical strategies used in the following classes: 'Ethos, Pathos, and Logos', 'repetition', 'rhetorical questions', 'hyperbole', 'insults and accusations'.\
-                Also provide an argument map in mermaid format, with conculsion, premises, co-premises, objections, counterarguments, rebuttals, inferences and lemmas if only if available in the arument. Do not use prior knowledge."
+                Give the quote and their corresponding type of rhetorical strategies used in the following classes: 'Ethos, Pathos, and Logos', 'repetition', 'rhetorical questions', 'hyperbole', 'insults and accusations'."
             },
             
             {
@@ -42,11 +41,7 @@ async def get_rhetorical_analysis(client, topic_of_debate, gang_violence_debate)
                             "type": "array",
                             "description": "Fallacies in the argument",
                             "items": {"$ref": "#/$defs/fallacy"}
-                        },
-                        "argument_map": {
-                            "type": "string",
-                            "description": "A mermaid graph representing the argument map",
-                        }
+                        }                        
                     },
                     "$defs": {
                         "rhetorical_strategy": {
@@ -82,7 +77,7 @@ async def get_rhetorical_analysis(client, topic_of_debate, gang_violence_debate)
                             "additionalProperties": False
                         }
                     },
-                    "required": ["rhetorical_strategies", "fallacies", "argument_map"],
+                    "required": ["rhetorical_strategies", "fallacies"],
                     "additionalProperties": False
                 } 
             }
@@ -96,14 +91,16 @@ async def get_rhetorical_analysis(client, topic_of_debate, gang_violence_debate)
         return None
     else:
         try: 
+            print("--- Rhetoric analysis reponse in  %s seconds ---" % (time.time() - start_time))
             return json.loads(llm_response.content)
 
         except Exception as e:
             print(f"Json parsing error: {e}")
-            return None
+            return {"error": "json_parsing_error"}
 
 
 async def get_fact_check(client, topic_of_debate, gang_violence_debate):
+    start_time = time.time()
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -130,7 +127,7 @@ async def get_fact_check(client, topic_of_debate, gang_violence_debate):
                             "type": "array",
                             "description": "Facts sources for quotes in the argument",
                             "items": {"$ref": "#/$defs/fact_check"}
-                        },
+                        }  
                     },
                     "$defs": {
                         "fact_check": {
@@ -168,11 +165,62 @@ async def get_fact_check(client, topic_of_debate, gang_violence_debate):
         return None
     else:
         try: 
+            print("--- Fact-checker reponse in  %s seconds ---" % (time.time() - start_time))
             return json.loads(llm_response.content)
 
         except Exception as e:
             print(f"Json parsing error: {e}")
-            return None
+            return {"error": "json_parsing_error"}
+
+async def get_argument_map(client, topic_of_debate, gang_violence_debate):
+    start_time = time.time()
+    completion = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "developer", 
+            "content": f"You are a helpful assistant to a debate moderator and extremely knowledable in debate analysis. Help the moderator by providing an argument map in mermaid format, with conculsion, premises, co-premises, objections, counterarguments, rebuttals, inferences and lemmas if only if available in the arument. \n\
+                The debate is on the topic: {topic_of_debate}."
+            },
+            
+            {
+                "role": "user",
+                "content": f"{gang_violence_debate}"
+            }
+        ],
+        response_format={
+            "type": "json_schema", 
+            "json_schema": {
+                "name": "moderation_help",
+                "strict": True,
+                "schema":{
+                    "type": "object",
+                    "properties": {
+                        
+                        "argument_map": {
+                            "type": "string",
+                            "description": "A mermaid graph representing the argument map",
+                        }
+                    },
+                    "required": ["argument_map"],
+                    "additionalProperties": False
+                } 
+            }
+        }
+    )
+
+    llm_response = completion.choices[0].message
+
+    if llm_response.refusal:
+        print(llm_response.refusal)
+        return None
+    else:
+        try: 
+            print("--- Argument map reponse in  %s seconds ---" % (time.time() - start_time))
+            return json.loads(llm_response.content)
+
+        except Exception as e:
+            print(f"Json parsing error: {e}")
+            return {"error": "json_parsing_error"}
 
 
 async def main():
@@ -186,46 +234,37 @@ async def main():
     task1 = get_rhetorical_analysis(client, topic_of_debate, gang_violence_debate)
     task2 = get_fact_check(client, topic_of_debate, gang_violence_debate)
 
-    results = await asyncio.gather(task1, task2)
+    # Task3 is for post analysis of debate
+    # task3 = get_argument_map(client, topic_of_debate, gang_violence_debate)
+    # results = await asyncio.gather(task1, task2, task3)
 
-    #Just some pretty printing on the console
-    console = Console()
+    start_time = time.time()
+    results = await asyncio.gather(task1, task2)
+    print("--- Gather response in %s seconds ---" % (time.time() - start_time))
+
 
     for result in results:
-        if result:
+        if result and not result.get("error"):
             rprint(result)
-            if 'rhetorical_strategies' in result and 'fallacies' in result and 'argument_map' in result:
-                table = Table(title="Rhetorical Analysis Results")
-                table.add_column("Type", justify="left")
-                table.add_column("Quote", justify="left")
-                table.add_column("Detail", justify="left")
 
-                table.add_row("Rhetorical Strategies", "", "")
-                for strategy in result['rhetorical_strategies']:
-                    table.add_row("Rhetorical Strategy", strategy['quote'], strategy['strategy'])
+        elif result.get("error"):
+            
+            rprint("error occurred, retring...")
+            task1 = get_rhetorical_analysis(client, topic_of_debate, gang_violence_debate)
+            task2 = get_fact_check(client, topic_of_debate, gang_violence_debate)
+            results = await asyncio.gather(task1, task2)
+            for result in results:
+                if result and not result.get("error"):
+                    rprint(result)
+                elif result.get("error"):
+                    rprint("error occurred again. Giving up!")
+                else:
+                    rprint("No response or error occurred.")
 
-                table.add_row("Fallacies", "", "")
-                for fallacy in result['fallacies']:
-                    table.add_row("Fallacy", fallacy['quote'], fallacy['fallacy'])
-
-                table.add_row("Argument Map", "", result['argument_map'])
-                console.print(table)
-
-            elif 'fact_checks' in result:
-                table = Table(title="Fact Check Results")
-                table.add_column("Quote", justify="left")
-                table.add_column("Source", justify="left")
-                table.add_column("URL", justify="left")
-
-                table.add_row("Fact Checks", "", "")
-                for fact_check in result['fact_checks']:
-                    table.add_row(fact_check['quote'], fact_check['source'], fact_check['url'])
-
-                console.print(table)
         else:
-            console.print("No response or error occurred.", style="bold red")
+            rprint("No response or error occurred.")
 
 if __name__ == "__main__":
     start_time = time.time()
     asyncio.run(main())
-    print("--- %s seconds ---" % (time.time() - start_time))
+    print("--- Overall reponse in %s seconds ---" % (time.time() - start_time))
