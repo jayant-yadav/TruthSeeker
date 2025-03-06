@@ -21,6 +21,19 @@ Create a `.env` file in the root directory with the following variables:
 OPENAI_API_KEY=your_openai_api_key
 ```
 
+### Google Cloud Speech-to-Text
+1. Go to "IAM & Admin" > "Service Accounts"
+2. Click "Create Service Account"
+3. Name your service account (e.g., "speech-to-text-service")
+4. Assign the "Cloud Speech-to-Text Service Agent" role
+5. Create and download the JSON key file
+6. Store this key securely - it gives access to your Google Cloud resources
+
+Add the following line to your `.env` file:
+```bash
+GOOGLE_APPLICATION_CREDENTIALS="FULL_PATH_TO_THE_JSON_KEY_FILE"
+```
+
 ## Running the Server
 
 ```bash
