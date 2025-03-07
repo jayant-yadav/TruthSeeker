@@ -1,0 +1,8 @@
+fastapi>=0.115.8
+openai>=1.63.0
+pydub>=0.25.1
+python-dotenv>=1.0.1
+python-multipart>=0.0.20
+scipy>=1.15.2
+uvicorn>=0.34.0
+websockets>=15.0
