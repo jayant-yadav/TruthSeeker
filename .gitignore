@@ -28,3 +28,6 @@ backend/models/*.bin
 backend/**/transcripts/
 backend/google_key.json
 *.log
+
+# keys
+api_keys.json
