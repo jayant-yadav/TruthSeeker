@@ -26,3 +26,5 @@ dist/
 backend/data/
 backend/models/*.bin
 backend/**/transcripts/
+
+api_keys.json
