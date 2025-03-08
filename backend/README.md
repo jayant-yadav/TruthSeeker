@@ -57,3 +57,5 @@ uv add <package-name>
 ```bash
 uv remove <package-name>
 ```
+
+# Commands to run backend on windows 
