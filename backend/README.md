@@ -44,7 +44,7 @@ uvicorn app.main:app --reload
 
 - The main application code is in the `app` directory
 - API endpoints are defined in `app/main.py`
-- Transcription logic is in `app/transcription.py`
+- Transcription logic is in `app/transcription/*.py`
 
 ## Managing Dependencies
 

@@ -6,3 +6,5 @@ python-multipart>=0.0.20
 scipy>=1.15.2
 uvicorn>=0.34.0
 websockets>=15.0
+audioop-lts==0.2.1 #psaudioop support was dropped in 3.13, this is a replacement
+google-cloud-speech==2.31.0
