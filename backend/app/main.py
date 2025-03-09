@@ -4,6 +4,7 @@ import tempfile
 import asyncio
 from datetime import datetime
 from pathlib import Path
+import time
 
 import numpy as np
 from app.transcription.common import (
@@ -89,7 +90,8 @@ transcriber = create_transcriber(
     model_checkpoint=active_config.model_checkpoint,
 )
 transcriber_lock = asyncio.Semaphore(1)  # Allow only one transcription at a time
-
+last_sent_time = time.time()
+buffered_text = []
 
 def save_transcript(result: TranscriptionResult):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -239,6 +241,7 @@ async def websocket_endpoint(websocket: WebSocket):
         # Initialize streaming mode
         transcriber.start_stream()
         logger.info("Transcriber streaming mode initialized")
+        global last_sent_time
 
         # Determine if we should use direct streaming based on the transcription method
         use_direct_streaming = should_use_direct_streaming(active_config)
@@ -295,6 +298,9 @@ async def websocket_endpoint(websocket: WebSocket):
                                     "text": result.text,
                                     "is_final": False,
                                 })
+
+                            realtime_moderation_helper(last_sent_time, result.text)
+
                         else:
                             # Add samples to buffer and get complete chunks
                             complete_chunks = audio_buffer.add_samples(samples)
@@ -406,7 +412,28 @@ async def websocket_endpoint(websocket: WebSocket):
             logger.error(f"Error closing websocket: {e}")
 
 
+
+def realtime_moderation_helper(last_sent_time : time, debate_text : str) -> None:
+    '''This function is used to get the rhetoric analysis and fact checking of the debate in real time'''
+
+    buffered_text.append(debate_text)
+
+    # Check if 15 seconds have passed since last analysis
+    if time.time() - last_sent_time >= 15:
+        if buffered_text:
+            full_text = " ".join(buffered_text)
+            logger.info(f"\n Sending to LLM for analysis {full_text}")
+            
+            # Analyze text with GPT-4o
+            asyncio.create_task(llm_calls(full_text))
+            
+            # Clear buffer and reset timer
+            buffered_text.clear()
+            last_sent_time = time.time()
+
+    return None
+
 @app.post("/rhetoric_analysis")
-def moderation_helper() -> RhetoricFactAnalysis:
-    '''This function is used to get the rhetoric analysis and fact checking of the debate'''
-    return asyncio.run(llm_calls())
+def postdebate_moderation_helper(debate_text : str) -> RhetoricFactAnalysis:
+    '''This function is used to get post rhetoric analysis and fact checking of the debate'''
+    return asyncio.run(llm_calls(debate_text))

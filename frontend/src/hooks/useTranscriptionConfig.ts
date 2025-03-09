@@ -36,6 +36,15 @@ export const useTranscriptionConfig = () => {
                 body: JSON.stringify(newConfig),
             });
 
+            // Just to trigger LLM rhetoric analysis on clicking config button, for testing purpose only
+            // await fetch('http://localhost:8000/rhetoric_analysis', {
+            //     method: 'POST',
+            //     headers: {
+            //         'Content-Type': 'application/json',
+            //     },
+            //     body: JSON.stringify(newConfig),
+            // });
+
             if (!response.ok) {
                 throw new Error(`Failed to update configuration: ${response.statusText}`);
             }
