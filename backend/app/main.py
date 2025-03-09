@@ -1,7 +1,7 @@
 import json
 import logging
 import tempfile
-from asyncio import Semaphore
+import asyncio
 from datetime import datetime
 from pathlib import Path
 
@@ -15,6 +15,7 @@ from app.transcription.google_speech import GoogleSpeechTranscriber
 from app.transcription.local_whisper import LocalWhisperTranscriber
 from app.transcription.openai_whisper import OpenAIWhisperTranscriber
 from app.transcription.utils import WHISPER_SAMPLE_RATE_HZ, AudioBuffer
+from app.rhetoric_fact_analyzer import RhetoricFactAnalysis, llm_calls
 from dotenv import load_dotenv
 from fastapi import (
     FastAPI,
@@ -34,7 +35,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 load_dotenv()
-
 
 class TranscriptionConfig(BaseModel):
     model_checkpoint: str = "whisper-1"
@@ -88,7 +88,7 @@ transcriber = create_transcriber(
     method=active_config.method,
     model_checkpoint=active_config.model_checkpoint,
 )
-transcriber_lock = Semaphore(1)  # Allow only one transcription at a time
+transcriber_lock = asyncio.Semaphore(1)  # Allow only one transcription at a time
 
 
 def save_transcript(result: TranscriptionResult):
@@ -404,3 +404,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 logger.info("WebSocket already closed by client")
         except Exception as e:
             logger.error(f"Error closing websocket: {e}")
+
+
+@app.post("/rhetoric_analysis")
+def moderation_helper() -> RhetoricFactAnalysis:
+    '''This function is used to get the rhetoric analysis and fact checking of the debate'''
+    return asyncio.run(llm_calls())
